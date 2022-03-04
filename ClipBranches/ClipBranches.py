@@ -19,7 +19,7 @@ class ClipBranches(ScriptedLoadableModule):
     self.parent.title = "ClipBranches"  # TODO: make this more human readable by adding spaces
     self.parent.categories = ["Examples"]  # TODO: set categories (folders where the module shows up in the module selector)
     self.parent.dependencies = []  # TODO: add here list of module names that this module requires
-    self.parent.contributors = ["John Doe (AnyWare Corp.)"]  # TODO: replace with "Firstname Lastname (Organization)"
+    self.parent.contributors = ["Suze-Anne Korteland (Erasmus MC)"]  # TODO: replace with "Firstname Lastname (Organization)"
     # TODO: update with short description of the module and a link to online module documentation
     self.parent.helpText = """
 This is an example of scripted loadable module bundled in an extension.
@@ -27,8 +27,7 @@ See more information in <a href="https://github.com/organization/projectname#Cli
 """
     # TODO: replace with organization, grant and thanks
     self.parent.acknowledgementText = """
-This file was originally developed by Jean-Christophe Fillion-Robin, Kitware Inc., Andras Lasso, PerkLab,
-and Steve Pieper, Isomics, Inc. and was partially funded by NIH grant 3P41RR013218-12S1.
+This file was originally developed by Suze-Anne Korteland, Erasmus MC, Rotterdam.
 """
 
     # Additional initialization step after application startup is complete
@@ -38,54 +37,6 @@ and Steve Pieper, Isomics, Inc. and was partially funded by NIH grant 3P41RR0132
 # Register sample data sets in Sample Data module
 #
 
-def registerSampleData():
-  """
-  Add data sets to Sample Data module.
-  """
-  # It is always recommended to provide sample data for users to make it easy to try the module,
-  # but if no sample data is available then this method (and associated startupCompeted signal connection) can be removed.
-
-  import SampleData
-  iconsPath = os.path.join(os.path.dirname(__file__), 'Resources/Icons')
-
-  # To ensure that the source code repository remains small (can be downloaded and installed quickly)
-  # it is recommended to store data sets that are larger than a few MB in a Github release.
-
-  # ClipBranches1
-  SampleData.SampleDataLogic.registerCustomSampleDataSource(
-    # Category and sample name displayed in Sample Data module
-    category='ClipBranches',
-    sampleName='ClipBranches1',
-    # Thumbnail should have size of approximately 260x280 pixels and stored in Resources/Icons folder.
-    # It can be created by Screen Capture module, "Capture all views" option enabled, "Number of images" set to "Single".
-    thumbnailFileName=os.path.join(iconsPath, 'ClipBranches1.png'),
-    # Download URL and target file name
-    uris="https://github.com/Slicer/SlicerTestingData/releases/download/SHA256/998cb522173839c78657f4bc0ea907cea09fd04e44601f17c82ea27927937b95",
-    fileNames='ClipBranches1.nrrd',
-    # Checksum to ensure file integrity. Can be computed by this command:
-    #  import hashlib; print(hashlib.sha256(open(filename, "rb").read()).hexdigest())
-    checksums = 'SHA256:998cb522173839c78657f4bc0ea907cea09fd04e44601f17c82ea27927937b95',
-    # This node name will be used when the data set is loaded
-    nodeNames='ClipBranches1'
-  )
-
-  # ClipBranches2
-  SampleData.SampleDataLogic.registerCustomSampleDataSource(
-    # Category and sample name displayed in Sample Data module
-    category='ClipBranches',
-    sampleName='ClipBranches2',
-    thumbnailFileName=os.path.join(iconsPath, 'ClipBranches2.png'),
-    # Download URL and target file name
-    uris="https://github.com/Slicer/SlicerTestingData/releases/download/SHA256/1a64f3f422eb3d1c9b093d1a18da354b13bcf307907c66317e2463ee530b7a97",
-    fileNames='ClipBranches2.nrrd',
-    checksums = 'SHA256:1a64f3f422eb3d1c9b093d1a18da354b13bcf307907c66317e2463ee530b7a97',
-    # This node name will be used when the data set is loaded
-    nodeNames='ClipBranches2'
-  )
-
-#
-# ClipBranchesWidget
-#
 
 class ClipBranchesWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   """Uses ScriptedLoadableModuleWidget base class, available at:
@@ -132,11 +83,9 @@ class ClipBranchesWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # These connections ensure that whenever user changes some settings on the GUI, that is saved in the MRML scene
     # (in the selected parameter node).
     self.ui.inputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
+    self.ui.inputcenterlineSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
     self.ui.outputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
-    self.ui.imageThresholdSliderWidget.connect("valueChanged(double)", self.updateParameterNodeFromGUI)
-    self.ui.invertOutputCheckBox.connect("toggled(bool)", self.updateParameterNodeFromGUI)
-    self.ui.invertedOutputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
-
+   
     # Buttons
     self.ui.applyButton.connect('clicked(bool)', self.onApplyButton)
 
@@ -188,10 +137,10 @@ class ClipBranchesWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.setParameterNode(self.logic.getParameterNode())
 
     # Select default input nodes if nothing is selected yet to save a few clicks for the user
-    if not self._parameterNode.GetNodeReference("InputVolume"):
-      firstVolumeNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLScalarVolumeNode")
-      if firstVolumeNode:
-        self._parameterNode.SetNodeReferenceID("InputVolume", firstVolumeNode.GetID())
+    if not self._parameterNode.GetNodeReference("firstModelNode"):
+      firstModelNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLModelNode")
+      if firstModelNode:
+        self._parameterNode.SetNodeReferenceID("firstModelNode", firstModelNode.GetID())
 
   def setParameterNode(self, inputParameterNode):
     """
@@ -227,18 +176,16 @@ class ClipBranchesWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self._updatingGUIFromParameterNode = True
 
     # Update node selectors and sliders
-    self.ui.inputSelector.setCurrentNode(self._parameterNode.GetNodeReference("InputVolume"))
-    self.ui.outputSelector.setCurrentNode(self._parameterNode.GetNodeReference("OutputVolume"))
-    self.ui.invertedOutputSelector.setCurrentNode(self._parameterNode.GetNodeReference("OutputVolumeInverse"))
-    self.ui.imageThresholdSliderWidget.value = float(self._parameterNode.GetParameter("Threshold"))
-    self.ui.invertOutputCheckBox.checked = (self._parameterNode.GetParameter("Invert") == "true")
-
+    self.ui.inputSelector.setCurrentNode(self._parameterNode.GetNodeReference("InputModel"))
+    self.ui.inputcenterlineSelector.setCurrentNode(self._parameterNode.GetNodeReference("InputCenterlineModel"))
+    self.ui.outputSelector.setCurrentNode(self._parameterNode.GetNodeReference("OutputModel"))
+   
     # Update buttons states and tooltips
-    if self._parameterNode.GetNodeReference("InputVolume") and self._parameterNode.GetNodeReference("OutputVolume"):
-      self.ui.applyButton.toolTip = "Compute output volume"
+    if self._parameterNode.GetNodeReference("InputModel") and self._parameterNode.GetNodeReference("InputCenterlineModel") and self._parameterNode.GetNodeReference("OutputModel"):
+      self.ui.applyButton.toolTip = "Compute clipped model"
       self.ui.applyButton.enabled = True
     else:
-      self.ui.applyButton.toolTip = "Select input and output volume nodes"
+      self.ui.applyButton.toolTip = "Select input and output nodes"
       self.ui.applyButton.enabled = False
 
     # All the GUI updates are done
@@ -255,12 +202,10 @@ class ClipBranchesWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     wasModified = self._parameterNode.StartModify()  # Modify all properties in a single batch
 
-    self._parameterNode.SetNodeReferenceID("InputVolume", self.ui.inputSelector.currentNodeID)
-    self._parameterNode.SetNodeReferenceID("OutputVolume", self.ui.outputSelector.currentNodeID)
-    self._parameterNode.SetParameter("Threshold", str(self.ui.imageThresholdSliderWidget.value))
-    self._parameterNode.SetParameter("Invert", "true" if self.ui.invertOutputCheckBox.checked else "false")
-    self._parameterNode.SetNodeReferenceID("OutputVolumeInverse", self.ui.invertedOutputSelector.currentNodeID)
-
+    self._parameterNode.SetNodeReferenceID("InputModel", self.ui.inputSelector.currentNodeID)
+    self._parameterNode.SetNodeReferenceID("InputCenterlineModel", self.ui.inputSelector.currentNodeID)
+    self._parameterNode.SetNodeReferenceID("OutputModel", self.ui.outputSelector.currentNodeID)
+    
     self._parameterNode.EndModify(wasModified)
 
   def onApplyButton(self):
@@ -271,13 +216,7 @@ class ClipBranchesWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
       # Compute output
       self.logic.process(self.ui.inputSelector.currentNode(), self.ui.outputSelector.currentNode(),
-        self.ui.imageThresholdSliderWidget.value, self.ui.invertOutputCheckBox.checked)
-
-      # Compute inverted output (if needed)
-      if self.ui.invertedOutputSelector.currentNode():
-        # If additional output volume is selected then result with inverted threshold is written there
-        self.logic.process(self.ui.inputSelector.currentNode(), self.ui.invertedOutputSelector.currentNode(),
-          self.ui.imageThresholdSliderWidget.value, not self.ui.invertOutputCheckBox.checked, showResult=False)
+        self.ui.inputcenterlineSelector.currentNode())
 
     except Exception as e:
       slicer.util.errorDisplay("Failed to compute results: "+str(e))
@@ -309,39 +248,35 @@ class ClipBranchesLogic(ScriptedLoadableModuleLogic):
     """
     Initialize parameter node with default settings.
     """
-    if not parameterNode.GetParameter("Threshold"):
-      parameterNode.SetParameter("Threshold", "100.0")
-    if not parameterNode.GetParameter("Invert"):
-      parameterNode.SetParameter("Invert", "false")
+    
 
-  def process(self, inputVolume, outputVolume, imageThreshold, invert=False, showResult=True):
+  def process(self, inputModel, inputCenterlineModel, outputModel, showResult=True):
     """
     Run the processing algorithm.
     Can be used without GUI widget.
-    :param inputVolume: volume to be thresholded
-    :param outputVolume: thresholding result
-    :param imageThreshold: values above/below this threshold will be set to 0
-    :param invert: if True then values above the threshold will be set to 0, otherwise values below are set to 0
-    :param showResult: show output volume in slice viewers
+    :param inputModel: Vascular model from which the branches should be clipped
+    :param inputCenterlineModel: Centerline model of vessel with branches on which to base the clipping
+    :param outputModel: resulting model with branches removed
+    :param showResult: show output model in slice viewers
     """
 
-    if not inputVolume or not outputVolume:
-      raise ValueError("Input or output volume is invalid")
+    if not inputModel or not inputCenterlineModel or not outputModel:
+      raise ValueError("Input or output model is invalid")
 
     import time
     startTime = time.time()
     logging.info('Processing started')
 
-    # Compute the thresholded output volume using the "Threshold Scalar Volume" CLI module
-    cliParams = {
-      'InputVolume': inputVolume.GetID(),
-      'OutputVolume': outputVolume.GetID(),
-      'ThresholdValue' : imageThreshold,
-      'ThresholdType' : 'Above' if invert else 'Below'
-      }
-    cliNode = slicer.cli.run(slicer.modules.thresholdscalarvolume, None, cliParams, wait_for_completion=True, update_display=showResult)
+    # Compute the model with the sidebranches removed using the slicervmtk module
+    # cliParams = {
+    #   'InputVolume': inputVolume.GetID(),
+    #   'OutputVolume': outputVolume.GetID(),
+    #   'ThresholdValue' : imageThreshold,
+    #   'ThresholdType' : 'Above' if invert else 'Below'
+    #   }
+    #cliNode = slicer.cli.run(slicer.modules.thresholdscalarvolume, None, cliParams, wait_for_completion=True, update_display=showResult)
     # We don't need the CLI module node anymore, remove it to not clutter the scene with it
-    slicer.mrmlScene.RemoveNode(cliNode)
+    #slicer.mrmlScene.RemoveNode(cliNode)
 
     stopTime = time.time()
     logging.info('Processing completed in {0:.2f} seconds'.format(stopTime-startTime))
@@ -380,36 +315,36 @@ class ClipBranchesTest(ScriptedLoadableModuleTest):
     your test should break so they know that the feature is needed.
     """
 
-    self.delayDisplay("Starting the test")
+    # self.delayDisplay("Starting the test")
 
-    # Get/create input data
+    # # Get/create input data
 
-    import SampleData
-    registerSampleData()
-    inputVolume = SampleData.downloadSample('ClipBranches1')
-    self.delayDisplay('Loaded test data set')
+    # import SampleData
+    # registerSampleData()
+    # inputVolume = SampleData.downloadSample('ClipBranches1')
+    # self.delayDisplay('Loaded test data set')
 
-    inputScalarRange = inputVolume.GetImageData().GetScalarRange()
-    self.assertEqual(inputScalarRange[0], 0)
-    self.assertEqual(inputScalarRange[1], 695)
+    # inputScalarRange = inputVolume.GetImageData().GetScalarRange()
+    # self.assertEqual(inputScalarRange[0], 0)
+    # self.assertEqual(inputScalarRange[1], 695)
 
-    outputVolume = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode")
-    threshold = 100
+    # outputVolume = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode")
+    # threshold = 100
 
-    # Test the module logic
+    # # Test the module logic
 
-    logic = ClipBranchesLogic()
+    # logic = ClipBranchesLogic()
 
-    # Test algorithm with non-inverted threshold
-    logic.process(inputVolume, outputVolume, threshold, True)
-    outputScalarRange = outputVolume.GetImageData().GetScalarRange()
-    self.assertEqual(outputScalarRange[0], inputScalarRange[0])
-    self.assertEqual(outputScalarRange[1], threshold)
+    # # Test algorithm with non-inverted threshold
+    # logic.process(inputVolume, outputVolume, threshold, True)
+    # outputScalarRange = outputVolume.GetImageData().GetScalarRange()
+    # self.assertEqual(outputScalarRange[0], inputScalarRange[0])
+    # self.assertEqual(outputScalarRange[1], threshold)
 
-    # Test algorithm with inverted threshold
-    logic.process(inputVolume, outputVolume, threshold, False)
-    outputScalarRange = outputVolume.GetImageData().GetScalarRange()
-    self.assertEqual(outputScalarRange[0], inputScalarRange[0])
-    self.assertEqual(outputScalarRange[1], inputScalarRange[1])
+    # # Test algorithm with inverted threshold
+    # logic.process(inputVolume, outputVolume, threshold, False)
+    # outputScalarRange = outputVolume.GetImageData().GetScalarRange()
+    # self.assertEqual(outputScalarRange[0], inputScalarRange[0])
+    # self.assertEqual(outputScalarRange[1], inputScalarRange[1])
 
-    self.delayDisplay('Test passed')
+    # self.delayDisplay('Test passed')
