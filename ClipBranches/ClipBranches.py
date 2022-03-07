@@ -22,7 +22,7 @@ class ClipBranches(ScriptedLoadableModule):
     self.parent.contributors = ["Suze-Anne Korteland (Erasmus MC)"]  # TODO: replace with "Firstname Lastname (Organization)"
     # TODO: update with short description of the module and a link to online module documentation
     self.parent.helpText = """
-This is an example of scripted loadable module bundled in an extension.
+This module clips the branches of a vessel model
 See more information in <a href="https://github.com/organization/projectname#ClipBranches">module documentation</a>.
 """
     # TODO: replace with organization, grant and thanks
@@ -31,7 +31,7 @@ This file was originally developed by Suze-Anne Korteland, Erasmus MC, Rotterdam
 """
 
     # Additional initialization step after application startup is complete
-    slicer.app.connect("startupCompleted()", registerSampleData)
+    #slicer.app.connect("startupCompleted()", registerSampleData)
 
 #
 # Register sample data sets in Sample Data module
@@ -203,7 +203,7 @@ class ClipBranchesWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     wasModified = self._parameterNode.StartModify()  # Modify all properties in a single batch
 
     self._parameterNode.SetNodeReferenceID("InputModel", self.ui.inputSelector.currentNodeID)
-    self._parameterNode.SetNodeReferenceID("InputCenterlineModel", self.ui.inputSelector.currentNodeID)
+    self._parameterNode.SetNodeReferenceID("InputCenterlineModel", self.ui.inputcenterlineSelector.currentNodeID)
     self._parameterNode.SetNodeReferenceID("OutputModel", self.ui.outputSelector.currentNodeID)
     
     self._parameterNode.EndModify(wasModified)
@@ -213,11 +213,20 @@ class ClipBranchesWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     Run processing when user clicks "Apply" button.
     """
     try:
-
-      # Compute output
-      self.logic.process(self.ui.inputSelector.currentNode(), self.ui.outputSelector.currentNode(),
-        self.ui.inputcenterlineSelector.currentNode())
-
+      # Clip branches
+      inputSurfacePolyData = self.logic.polyDataFromNode(self._parameterNode.GetNodeReference("InputModel"))
+      centerlinePolyData = self.logic.polyDataFromNode(self._parameterNode.GetNodeReference("InputCenterlineModel"))
+      
+      outputSurfacePolyData = self.logic.clipBranches(inputSurfacePolyData,centerlinePolyData,self.ui.outputSelector.currentNode())
+       
+      inputSurfaceModelNode = self._parameterNode.GetNodeReference("InputModel")
+      outputModelNode = self._parameterNode.GetNodeReference("OutputModel")
+      if outputModelNode:
+                outputModelNode.SetAndObserveMesh(outputSurfacePolyData)
+                if not outputModelNode.GetDisplayNode():
+                    outputModelNode.CreateDefaultDisplayNodes()
+                    outputModelNode.GetDisplayNode().SetColor(0.0, 1.0, 0.0)
+                    inputSurfaceModelNode.GetDisplayNode().SetOpacity(0.4)
     except Exception as e:
       slicer.util.errorDisplay("Failed to compute results: "+str(e))
       import traceback
@@ -243,14 +252,30 @@ class ClipBranchesLogic(ScriptedLoadableModuleLogic):
     Called when the logic class is instantiated. Can be used for initializing member variables.
     """
     ScriptedLoadableModuleLogic.__init__(self)
-
+    self.blankingArrayName = 'Blanking'
+    self.radiusArrayName = 'Radius'  # maximum inscribed sphere radius
+    self.groupIdsArrayName = 'GroupIds'
+    self.centerlineIdsArrayName = 'CenterlineIds'
+    self.tractIdsArrayName = 'TractIds'
+    
   def setDefaultParameters(self, parameterNode):
     """
     Initialize parameter node with default settings.
     """
     
+  def polyDataFromNode(self, surfaceNode):
+    if not surfaceNode:
+      logging.error("Invalid input surface node")
+      return None
+      
+    if surfaceNode.IsA("vtkMRMLModelNode"):
+        return surfaceNode.GetPolyData()
+    else:
+        logging.error("Surface can only be loaded from model or segmentation node")
+        return None
 
-  def process(self, inputModel, inputCenterlineModel, outputModel, showResult=True):
+
+  def clipBranches(self, surfacePolyData, centerlinePolyData, outputModel, showResult=True):
     """
     Run the processing algorithm.
     Can be used without GUI widget.
@@ -260,7 +285,7 @@ class ClipBranchesLogic(ScriptedLoadableModuleLogic):
     :param showResult: show output model in slice viewers
     """
 
-    if not inputModel or not inputCenterlineModel or not outputModel:
+    if not surfacePolyData or not centerlinePolyData or not outputModel:
       raise ValueError("Input or output model is invalid")
 
     import time
@@ -268,19 +293,49 @@ class ClipBranchesLogic(ScriptedLoadableModuleLogic):
     logging.info('Processing started')
 
     # Compute the model with the sidebranches removed using the slicervmtk module
-    # cliParams = {
-    #   'InputVolume': inputVolume.GetID(),
-    #   'OutputVolume': outputVolume.GetID(),
-    #   'ThresholdValue' : imageThreshold,
-    #   'ThresholdType' : 'Above' if invert else 'Below'
-    #   }
-    #cliNode = slicer.cli.run(slicer.modules.thresholdscalarvolume, None, cliParams, wait_for_completion=True, update_display=showResult)
-    # We don't need the CLI module node anymore, remove it to not clutter the scene with it
-    #slicer.mrmlScene.RemoveNode(cliNode)
+    
+    try:
+      import vtkvmtkComputationalGeometryPython as vtkvmtkComputationalGeometry
+      
+    except ImportError:
+        raise ImportError("VMTK library is not found")
+    
+    branchExtractor = vtkvmtkComputationalGeometry.vtkvmtkCenterlineBranchExtractor()
+    branchExtractor.SetInputData(centerlinePolyData)
+    branchExtractor.SetBlankingArrayName(self.blankingArrayName)
+    branchExtractor.SetRadiusArrayName(self.radiusArrayName)
+    branchExtractor.SetGroupIdsArrayName(self.groupIdsArrayName)
+    branchExtractor.SetCenterlineIdsArrayName(self.centerlineIdsArrayName)
+    branchExtractor.SetTractIdsArrayName(self.tractIdsArrayName)
+    branchExtractor.Update()
+    centerlines = branchExtractor.GetOutput()
+    
+    surfaceClipper = vtkvmtkComputationalGeometry.vtkvmtkPolyDataCenterlineGroupsClipper()
+    surfaceClipper.SetInputData(surfacePolyData)
+    surfaceClipper.SetCenterlines(centerlines)
+    surfaceClipper.SetCenterlineGroupIdsArrayName(self.groupIdsArrayName)
+    surfaceClipper.SetGroupIdsArrayName(self.groupIdsArrayName)
+    surfaceClipper.SetCenterlineRadiusArrayName(self.radiusArrayName)
+    surfaceClipper.SetBlankingArrayName(self.blankingArrayName)
+    surfaceClipper.SetCutoffRadiusFactor(1e16)
+    surfaceClipper.SetClipValue(0)
+    surfaceClipper.SetUseRadiusInformation(1)
+    surfaceClipper.SetGenerateClippedOutput(1)
+    groupIds = vtk.vtkIdList()
+    groupIds.InsertNextId(3)
+    surfaceClipper.SetCenterlineGroupIds(groupIds)
+    # clip all branches
+    #surfaceClipper.SetClipAllCenterlineGroupIds(1)
+    surfaceClipper.Update()
+    
+
+    outputSurfacePolyData = vtk.vtkPolyData()
+    outputSurfacePolyData.DeepCopy(surfaceClipper.GetClippedOutput())
 
     stopTime = time.time()
     logging.info('Processing completed in {0:.2f} seconds'.format(stopTime-startTime))
-
+    
+    return outputSurfacePolyData
 #
 # ClipBranchesTest
 #
