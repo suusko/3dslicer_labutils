@@ -56,7 +56,7 @@
        <widget class="qMRMLNodeComboBox" name="inputCenterlineSelector">
         <property name="nodeTypes">
          <stringlist>
-          <string>vtkMRMLMarkupsCurveNode</string>
+          <string>vtkMRMLModelNode</string>
          </stringlist>
         </property>
         <property name="showChildNodeTypes">

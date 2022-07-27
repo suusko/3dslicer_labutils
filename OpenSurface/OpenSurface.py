@@ -227,7 +227,30 @@ class OpenSurfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     Run processing when user clicks "showPlane" button.
     """
-    print(" test" )
+    with slicer.util.tryWithErrorDisplay("Failed to compute results.", waitCursor=True):
+      # retreive the centerline curve data
+      inputCenterlinePolyData = self.logic.polyDataFromNode(self._parameterNode.GetNodeReference("InputCenterline"))
+      
+      # compute centerline normals and tangents
+      self.centerlineGeometryPolyData = self.logic.computeCenterlineGeometry(inputCenterlinePolyData)
+      
+      # Todo: move this to logic class
+      from vtk.numpy_interface import dataset_adapter as dsa
+
+      pointdata = dsa.WrapDataObject(self.centerlineGeometryPolyData).PointData
+      normaldata = pointdata['FrenetNormal']
+      tangentdata = pointdata['FrenetTangent']
+      points = dsa.WrapDataObject(self.centerlineGeometryPolyData).Points
+
+      # create a plane normal to the centerline curve at the end location
+      planeNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsPlaneNode')
+      planeNode.SetCenter(points[0,:])
+      planeNode.SetNormal(tangentdata[0,:]) 
+      # display the plane in the ui
+      
+      
+      # Todo: let the user select the location of the plane along the centerline curve either by mouseclick or through a slider
+    
     
   def onApplyButton(self):
     """
@@ -265,6 +288,14 @@ class OpenSurfaceLogic(ScriptedLoadableModuleLogic):
     Called when the logic class is instantiated. Can be used for initializing member variables.
     """
     ScriptedLoadableModuleLogic.__init__(self)
+    self.lengthArrayName = 'Length'
+    self.curvatureArrayName = 'Curvature'
+    self.torsionArrayName = 'Torsion'
+    self.tortuosityArrayName = 'Tortuosity'
+    self.frenetTangentArrayName = 'FrenetTangent'
+    self.frenetNormalArrayName = 'FrenetNormal'
+    self.frenetBinormalArrayName = 'FrenetBinormal'
+    
 
   def setDefaultParameters(self, parameterNode):
     """
@@ -275,6 +306,41 @@ class OpenSurfaceLogic(ScriptedLoadableModuleLogic):
     if not parameterNode.GetParameter("Invert"):
       parameterNode.SetParameter("Invert", "false")
 
+  def polyDataFromNode(self, surfaceNode):
+    if not surfaceNode:
+      logging.error("Invalid input surface node")
+      return None
+    
+    if surfaceNode.IsA("vtkMRMLModelNode"):
+      return surfaceNode.GetPolyData()
+    else:
+      logging.error("Surface can only be loaded from model or segmentation node")
+      return None
+      
+  def computeCenterlineGeometry(self,centerlinePolyData):
+    """
+    Compute the centerline geometry
+    Can be used without the GUI widget.
+    :param centerlinePolyData: Centerline model of vessel
+    """
+    import vtkvmtkComputationalGeometryPython as vtkvmtkComputationalGeometry
+    centerlineGeometry = vtkvmtkComputationalGeometry.vtkvmtkCenterlineGeometry()
+    centerlineGeometry.SetInputData(centerlinePolyData)
+    centerlineGeometry.SetLengthArrayName(self.lengthArrayName)
+    centerlineGeometry.SetCurvatureArrayName(self.curvatureArrayName)
+    centerlineGeometry.SetTorsionArrayName(self.torsionArrayName)
+    centerlineGeometry.SetTortuosityArrayName(self.tortuosityArrayName)
+    centerlineGeometry.SetFrenetTangentArrayName(self.frenetTangentArrayName)
+    centerlineGeometry.SetFrenetNormalArrayName(self.frenetNormalArrayName)
+    centerlineGeometry.SetFrenetBinormalArrayName(self.frenetBinormalArrayName)
+    # centerlineGeometry.SetLineSmoothing(0)
+    # centerlineGeometry.SetOutputSmoothedLines(0)
+    # centerlineGeometry.SetNumberOfSmoothingIterations(100)
+    # centerlineGeometry.SetSmoothingFactor(0.1)
+    centerlineGeometry.Update()
+    return centerlineGeometry.GetOutput()
+    
+      
   def process(self, inputVolume, outputVolume, imageThreshold, invert=False, showResult=True):
     """
     Run the processing algorithm.
