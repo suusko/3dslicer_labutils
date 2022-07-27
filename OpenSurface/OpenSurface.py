@@ -22,70 +22,16 @@ class OpenSurface(ScriptedLoadableModule):
     self.parent.title = "OpenSurface"  # TODO: make this more human readable by adding spaces
     self.parent.categories = ["Examples"]  # TODO: set categories (folders where the module shows up in the module selector)
     self.parent.dependencies = []  # TODO: add here list of module names that this module requires
-    self.parent.contributors = ["John Doe (AnyWare Corp.)"]  # TODO: replace with "Firstname Lastname (Organization)"
+    self.parent.contributors = ["Suze-Anne korteland (Erasmus MC)"]  # TODO: replace with "Firstname Lastname (Organization)"
     # TODO: update with short description of the module and a link to online module documentation
     self.parent.helpText = """
-This is an example of scripted loadable module bundled in an extension.
+This module can be used to open a vessel surface normal to a centerline curve.
 See more information in <a href="https://github.com/organization/projectname#OpenSurface">module documentation</a>.
 """
     # TODO: replace with organization, grant and thanks
     self.parent.acknowledgementText = """
-This file was originally developed by Jean-Christophe Fillion-Robin, Kitware Inc., Andras Lasso, PerkLab,
-and Steve Pieper, Isomics, Inc. and was partially funded by NIH grant 3P41RR013218-12S1.
+This file was originally developed Suze-anne korteland, Erasmus MC, Rotterdam.
 """
-
-    # Additional initialization step after application startup is complete
-    slicer.app.connect("startupCompleted()", registerSampleData)
-
-
-#
-# Register sample data sets in Sample Data module
-#
-
-def registerSampleData():
-  """
-  Add data sets to Sample Data module.
-  """
-  # It is always recommended to provide sample data for users to make it easy to try the module,
-  # but if no sample data is available then this method (and associated startupCompeted signal connection) can be removed.
-
-  import SampleData
-  iconsPath = os.path.join(os.path.dirname(__file__), 'Resources/Icons')
-
-  # To ensure that the source code repository remains small (can be downloaded and installed quickly)
-  # it is recommended to store data sets that are larger than a few MB in a Github release.
-
-  # OpenSurface1
-  SampleData.SampleDataLogic.registerCustomSampleDataSource(
-    # Category and sample name displayed in Sample Data module
-    category='OpenSurface',
-    sampleName='OpenSurface1',
-    # Thumbnail should have size of approximately 260x280 pixels and stored in Resources/Icons folder.
-    # It can be created by Screen Capture module, "Capture all views" option enabled, "Number of images" set to "Single".
-    thumbnailFileName=os.path.join(iconsPath, 'OpenSurface1.png'),
-    # Download URL and target file name
-    uris="https://github.com/Slicer/SlicerTestingData/releases/download/SHA256/998cb522173839c78657f4bc0ea907cea09fd04e44601f17c82ea27927937b95",
-    fileNames='OpenSurface1.nrrd',
-    # Checksum to ensure file integrity. Can be computed by this command:
-    #  import hashlib; print(hashlib.sha256(open(filename, "rb").read()).hexdigest())
-    checksums = 'SHA256:998cb522173839c78657f4bc0ea907cea09fd04e44601f17c82ea27927937b95',
-    # This node name will be used when the data set is loaded
-    nodeNames='OpenSurface1'
-  )
-
-  # OpenSurface2
-  SampleData.SampleDataLogic.registerCustomSampleDataSource(
-    # Category and sample name displayed in Sample Data module
-    category='OpenSurface',
-    sampleName='OpenSurface2',
-    thumbnailFileName=os.path.join(iconsPath, 'OpenSurface2.png'),
-    # Download URL and target file name
-    uris="https://github.com/Slicer/SlicerTestingData/releases/download/SHA256/1a64f3f422eb3d1c9b093d1a18da354b13bcf307907c66317e2463ee530b7a97",
-    fileNames='OpenSurface2.nrrd',
-    checksums = 'SHA256:1a64f3f422eb3d1c9b093d1a18da354b13bcf307907c66317e2463ee530b7a97',
-    # This node name will be used when the data set is loaded
-    nodeNames='OpenSurface2'
-  )
 
 
 #
@@ -119,6 +65,12 @@ class OpenSurfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.layout.addWidget(uiWidget)
     self.ui = slicer.util.childWidgetVariables(uiWidget)
 
+    self.nodeSelectors = [
+    (self.ui.inputSurfaceSelector, "InputSurface"),
+    (self.ui.inputCenterlineSelector, "InputCenterline"),
+    (self.ui.outputSurfaceSelector, "OutputSurface")
+    ]
+
     # Set scene in MRML widgets. Make sure that in Qt designer the top-level qMRMLWidget's
     # "mrmlSceneChanged(vtkMRMLScene*)" signal in is connected to each MRML widget's.
     # "setMRMLScene(vtkMRMLScene*)" slot.
@@ -136,15 +88,13 @@ class OpenSurfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     # These connections ensure that whenever user changes some settings on the GUI, that is saved in the MRML scene
     # (in the selected parameter node).
-    self.ui.inputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
-    self.ui.outputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
-    self.ui.imageThresholdSliderWidget.connect("valueChanged(double)", self.updateParameterNodeFromGUI)
-    self.ui.invertOutputCheckBox.connect("toggled(bool)", self.updateParameterNodeFromGUI)
-    self.ui.invertedOutputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
-
+    self.ui.inputSurfaceSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
+    self.ui.inputCenterlineSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
+    self.ui.outputSurfaceSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
+   
     # Buttons
     self.ui.applyButton.connect('clicked(bool)', self.onApplyButton)
-
+    self.ui.showPlaneButton.connect('clicked(bool)', self.onShowPlaneButton)
     # Make sure parameter node is initialized (needed for module reload)
     self.initializeParameterNode()
 
@@ -193,10 +143,10 @@ class OpenSurfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.setParameterNode(self.logic.getParameterNode())
 
     # Select default input nodes if nothing is selected yet to save a few clicks for the user
-    if not self._parameterNode.GetNodeReference("InputVolume"):
-      firstVolumeNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLScalarVolumeNode")
-      if firstVolumeNode:
-        self._parameterNode.SetNodeReferenceID("InputVolume", firstVolumeNode.GetID())
+    if not self._parameterNode.GetNodeReference("InputSurface"):
+      firstModelNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLModelNode")
+      if firstModelNode:
+        self._parameterNode.SetNodeReferenceID("InputSurface", firstModelNode.GetID())
 
   def setParameterNode(self, inputParameterNode):
     """
@@ -232,20 +182,26 @@ class OpenSurfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self._updatingGUIFromParameterNode = True
 
     # Update node selectors and sliders
-    self.ui.inputSelector.setCurrentNode(self._parameterNode.GetNodeReference("InputVolume"))
-    self.ui.outputSelector.setCurrentNode(self._parameterNode.GetNodeReference("OutputVolume"))
-    self.ui.invertedOutputSelector.setCurrentNode(self._parameterNode.GetNodeReference("OutputVolumeInverse"))
-    self.ui.imageThresholdSliderWidget.value = float(self._parameterNode.GetParameter("Threshold"))
-    self.ui.invertOutputCheckBox.checked = (self._parameterNode.GetParameter("Invert") == "true")
-
+    for nodeSelector,roleName in self.nodeSelectors:
+      nodeSelector.setCurrentNode(self._parameterNode.GetNodeReference(roleName))
+      
     # Update buttons states and tooltips
-    if self._parameterNode.GetNodeReference("InputVolume") and self._parameterNode.GetNodeReference("OutputVolume"):
-      self.ui.applyButton.toolTip = "Compute output volume"
+    
+    if self._parameterNode.GetNodeReference("InputSurface") and self._parameterNode.GetNodeReference("InputCenterline"):
+      self.ui.showPlaneButton.toolTip = "Compute clipping plane"
+      self.ui.showPlaneButton.enabled = True
+    else:
+      self.ui.showPlaneButton.toolTip = "Select input surface and centerline nodes"
+      self.ui.showPlaneButton.enabled = False
+
+    clipReady = False
+    if clipReady:
+      self.ui.applyButton.toolTip = "Clip surface with plane" 
       self.ui.applyButton.enabled = True
     else:
-      self.ui.applyButton.toolTip = "Select input and output volume nodes"
+      self.ui.applyButton.toolTip = " to apply clip, first compute clipping plane"
       self.ui.applyButton.enabled = False
-
+      
     # All the GUI updates are done
     self._updatingGUIFromParameterNode = False
 
@@ -259,15 +215,20 @@ class OpenSurfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       return
 
     wasModified = self._parameterNode.StartModify()  # Modify all properties in a single batch
-
-    self._parameterNode.SetNodeReferenceID("InputVolume", self.ui.inputSelector.currentNodeID)
-    self._parameterNode.SetNodeReferenceID("OutputVolume", self.ui.outputSelector.currentNodeID)
-    self._parameterNode.SetParameter("Threshold", str(self.ui.imageThresholdSliderWidget.value))
-    self._parameterNode.SetParameter("Invert", "true" if self.ui.invertOutputCheckBox.checked else "false")
-    self._parameterNode.SetNodeReferenceID("OutputVolumeInverse", self.ui.invertedOutputSelector.currentNodeID)
+    
+    for nodeSelector, roleName in self.nodeSelectors:
+      self._parameterNode.SetNodeReferenceID(roleName, nodeSelector.currentNodeID)
+   
 
     self._parameterNode.EndModify(wasModified)
 
+
+  def onShowPlaneButton(self):
+    """
+    Run processing when user clicks "showPlane" button.
+    """
+    print(" test" )
+    
   def onApplyButton(self):
     """
     Run processing when user clicks "Apply" button.

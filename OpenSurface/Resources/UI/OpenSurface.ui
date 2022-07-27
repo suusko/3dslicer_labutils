@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>279</width>
-    <height>286</height>
+    <width>291</width>
+    <height>325</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
@@ -20,18 +20,18 @@
       <item row="0" column="0">
        <widget class="QLabel" name="label">
         <property name="text">
-         <string>Input volume:</string>
+         <string>Input surface:</string>
         </property>
        </widget>
       </item>
       <item row="0" column="1">
-       <widget class="qMRMLNodeComboBox" name="inputSelector">
+       <widget class="qMRMLNodeComboBox" name="inputSurfaceSelector">
         <property name="toolTip">
          <string>Pick the input to the algorithm.</string>
         </property>
         <property name="nodeTypes">
          <stringlist>
-          <string>vtkMRMLScalarVolumeNode</string>
+          <string>vtkMRMLModelNode</string>
          </stringlist>
         </property>
         <property name="showChildNodeTypes">
@@ -48,26 +48,25 @@
       <item row="2" column="0">
        <widget class="QLabel" name="label_3">
         <property name="text">
-         <string>Image threshold:</string>
+         <string>Input centerline curve:</string>
         </property>
        </widget>
       </item>
       <item row="2" column="1">
-       <widget class="ctkSliderWidget" name="imageThresholdSliderWidget">
-        <property name="toolTip">
-         <string>Set threshold value for computing the output image. Voxels that have intensities lower than this value will set to zero.</string>
+       <widget class="qMRMLNodeComboBox" name="inputCenterlineSelector">
+        <property name="nodeTypes">
+         <stringlist>
+          <string>vtkMRMLMarkupsCurveNode</string>
+         </stringlist>
         </property>
-        <property name="singleStep">
-         <double>0.100000000000000</double>
+        <property name="showChildNodeTypes">
+         <bool>false</bool>
         </property>
-        <property name="minimum">
-         <double>-100.000000000000000</double>
+        <property name="addEnabled">
+         <bool>false</bool>
         </property>
-        <property name="maximum">
-         <double>500.000000000000000</double>
-        </property>
-        <property name="value">
-         <double>0.500000000000000</double>
+        <property name="removeEnabled">
+         <bool>false</bool>
         </property>
        </widget>
       </item>
@@ -83,53 +82,25 @@
       <item row="0" column="0">
        <widget class="QLabel" name="label_2">
         <property name="text">
-         <string>Thresholded volume:</string>
+         <string>Opened surface:</string>
         </property>
        </widget>
       </item>
       <item row="0" column="1">
-       <widget class="qMRMLNodeComboBox" name="outputSelector">
+       <widget class="qMRMLNodeComboBox" name="outputSurfaceSelector">
         <property name="toolTip">
          <string>Pick the output to the algorithm.</string>
         </property>
         <property name="nodeTypes">
          <stringlist>
-          <string>vtkMRMLScalarVolumeNode</string>
+          <string>vtkMRMLModelNode</string>
          </stringlist>
         </property>
         <property name="showChildNodeTypes">
          <bool>false</bool>
         </property>
-        <property name="noneEnabled">
-         <bool>true</bool>
-        </property>
-        <property name="addEnabled">
-         <bool>true</bool>
-        </property>
-        <property name="removeEnabled">
-         <bool>true</bool>
-        </property>
-       </widget>
-      </item>
-      <item row="1" column="0">
-       <widget class="QLabel" name="label_5">
-        <property name="text">
-         <string>Inverted volume:</string>
-        </property>
-       </widget>
-      </item>
-      <item row="1" column="1">
-       <widget class="qMRMLNodeComboBox" name="invertedOutputSelector">
-        <property name="toolTip">
-         <string>Result with inverted threshold will be written into this volume</string>
-        </property>
-        <property name="nodeTypes">
-         <stringlist>
-          <string>vtkMRMLScalarVolumeNode</string>
-         </stringlist>
-        </property>
-        <property name="showChildNodeTypes">
-         <bool>false</bool>
+        <property name="baseName">
+         <string>open_model</string>
         </property>
         <property name="noneEnabled">
          <bool>true</bool>
@@ -146,32 +117,13 @@
     </widget>
    </item>
    <item>
-    <widget class="ctkCollapsibleButton" name="advancedCollapsibleButton">
+    <widget class="QPushButton" name="showPlaneButton">
+     <property name="enabled">
+      <bool>false</bool>
+     </property>
      <property name="text">
-      <string>Advanced</string>
+      <string>Show Clipping Plane</string>
      </property>
-     <property name="collapsed">
-      <bool>true</bool>
-     </property>
-     <layout class="QFormLayout" name="formLayout_3">
-      <item row="0" column="0">
-       <widget class="QLabel" name="label_4">
-        <property name="text">
-         <string>Invert threshold: </string>
-        </property>
-       </widget>
-      </item>
-      <item row="0" column="1">
-       <widget class="QCheckBox" name="invertOutputCheckBox">
-        <property name="toolTip">
-         <string>If checked, values above threshold are set to 0. If unchecked, values below are set to 0.</string>
-        </property>
-        <property name="text">
-         <string/>
-        </property>
-       </widget>
-      </item>
-     </layout>
     </widget>
    </item>
    <item>
@@ -210,11 +162,6 @@
    <container>1</container>
   </customwidget>
   <customwidget>
-   <class>ctkSliderWidget</class>
-   <extends>QWidget</extends>
-   <header>ctkSliderWidget.h</header>
-  </customwidget>
-  <customwidget>
    <class>qMRMLNodeComboBox</class>
    <extends>QWidget</extends>
    <header>qMRMLNodeComboBox.h</header>
@@ -231,7 +178,7 @@
   <connection>
    <sender>OpenSurface</sender>
    <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
-   <receiver>inputSelector</receiver>
+   <receiver>inputSurfaceSelector</receiver>
    <slot>setMRMLScene(vtkMRMLScene*)</slot>
    <hints>
     <hint type="sourcelabel">
@@ -247,7 +194,7 @@
   <connection>
    <sender>OpenSurface</sender>
    <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
-   <receiver>outputSelector</receiver>
+   <receiver>outputSurfaceSelector</receiver>
    <slot>setMRMLScene(vtkMRMLScene*)</slot>
    <hints>
     <hint type="sourcelabel">
@@ -263,16 +210,16 @@
   <connection>
    <sender>OpenSurface</sender>
    <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
-   <receiver>invertedOutputSelector</receiver>
+   <receiver>inputCenterlineSelector</receiver>
    <slot>setMRMLScene(vtkMRMLScene*)</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>161</x>
-     <y>8</y>
+     <x>145</x>
+     <y>162</y>
     </hint>
     <hint type="destinationlabel">
-     <x>173</x>
-     <y>176</y>
+     <x>203</x>
+     <y>91</y>
     </hint>
    </hints>
   </connection>
