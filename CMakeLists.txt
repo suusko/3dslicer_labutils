@@ -20,6 +20,7 @@ include(${Slicer_USE_FILE})
 #-----------------------------------------------------------------------------
 # Extension modules
 add_subdirectory(ClipBranches)
+add_subdirectory(OpenSurface)
 ## NEXT_MODULE
 
 #-----------------------------------------------------------------------------
