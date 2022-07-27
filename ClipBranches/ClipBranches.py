@@ -2,6 +2,7 @@ import os
 import unittest
 import logging
 import vtk, qt, ctk, slicer
+import math
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 
@@ -84,8 +85,9 @@ class ClipBranchesWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # (in the selected parameter node).
     self.ui.inputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
     self.ui.inputcenterlineSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
-    self.ui.outputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
-   
+    self.ui.outputBranchModelSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
+    self.ui.outputBranchIdListSelector.connect("currentNodeChanged(vtkMRMLNode*)",self.updateParameterNodeFromGUI)
+    
     # Buttons
     self.ui.applyButton.connect('clicked(bool)', self.onApplyButton)
 
@@ -178,10 +180,47 @@ class ClipBranchesWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # Update node selectors and sliders
     self.ui.inputSelector.setCurrentNode(self._parameterNode.GetNodeReference("InputModel"))
     self.ui.inputcenterlineSelector.setCurrentNode(self._parameterNode.GetNodeReference("InputCenterlineModel"))
-    self.ui.outputSelector.setCurrentNode(self._parameterNode.GetNodeReference("OutputModel"))
-   
+    self.ui.outputBranchModelSelector.setCurrentNode(self._parameterNode.GetNodeReference("OutputBranchModel"))
+    self.ui.outputBranchIdListSelector.setCurrentNode(self._parameterNode.GetNodeReference("OutputBranchIdList"))
+    
+    # if user has selected a centerline model, compute the branches and display them in the 3D window
+    if self._parameterNode.GetNodeReference("InputCenterlineModel"):
+      centerlinePolyData = self.logic.polyDataFromNode(self._parameterNode.GetNodeReference("InputCenterlineModel"))
+      branchedCenterlinePolyData = self.logic.computeCenterlineBranches(centerlinePolyData)
+     
+      branchIdListNode = self._parameterNode.GetNodeReference("OutputBranchIdList")
+      if branchIdListNode and branchIdListNode.IsA("vtkMRMLMarkupsFiducialNode"):
+        # clear list and fill it again
+        branchIdListNode.RemoveAllMarkups()
+        branchids = []
+        # get the branches out
+        for i in range(branchedCenterlinePolyData.GetNumberOfCells()):
+          (group_id, loc) = self.logic.getCenterlineGroup(branchedCenterlinePolyData,i)
+          # display group id in 3D view
+          # create markups fiducial
+          if group_id not in branchids:
+            # only add the group id if it is not already in the list
+            n=branchIdListNode.AddFiducial(loc[0],loc[1],loc[2])
+            branchIdListNode.SetNthControlPointLabel(n,str(group_id))
+            branchids.append(group_id)
+        
+        # now create checkboxes so the user can select which branches to clip:
+        ncols = 6
+        nrows = math.ceil(len(branchids)/ncols)
+        self.branchIdCheckBoxDict={}
+        
+        for i in branchids:
+          newCheckBox =ctk.ctkCheckBox()
+          newCheckBox.text=str(branchids[i])
+          self.branchIdCheckBoxDict[branchids[i]] = newCheckBox
+          row = i//ncols+1
+          col = i%ncols 
+          self.ui.gridLayout.addWidget(newCheckBox,row,col)
+        
+      
+    
     # Update buttons states and tooltips
-    if self._parameterNode.GetNodeReference("InputModel") and self._parameterNode.GetNodeReference("InputCenterlineModel") and self._parameterNode.GetNodeReference("OutputModel"):
+    if self._parameterNode.GetNodeReference("InputModel") and self._parameterNode.GetNodeReference("InputCenterlineModel") and self._parameterNode.GetNodeReference("OutputBranchModel") and self._parameterNode.GetNodeReference("OutputBranchIdList"):
       self.ui.applyButton.toolTip = "Compute clipped model"
       self.ui.applyButton.enabled = True
     else:
@@ -204,7 +243,8 @@ class ClipBranchesWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     self._parameterNode.SetNodeReferenceID("InputModel", self.ui.inputSelector.currentNodeID)
     self._parameterNode.SetNodeReferenceID("InputCenterlineModel", self.ui.inputcenterlineSelector.currentNodeID)
-    self._parameterNode.SetNodeReferenceID("OutputModel", self.ui.outputSelector.currentNodeID)
+    self._parameterNode.SetNodeReferenceID("OutputBranchModel", self.ui.outputBranchModelSelector.currentNodeID)
+    self._parameterNode.SetNodeReferenceID("OutputBranchIdList", self.ui.outputBranchIdListSelector.currentNodeID)
     
     self._parameterNode.EndModify(wasModified)
 
@@ -217,15 +257,23 @@ class ClipBranchesWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       inputSurfacePolyData = self.logic.polyDataFromNode(self._parameterNode.GetNodeReference("InputModel"))
       centerlinePolyData = self.logic.polyDataFromNode(self._parameterNode.GetNodeReference("InputCenterlineModel"))
       
-      outputSurfacePolyData = self.logic.clipBranches(inputSurfacePolyData,centerlinePolyData,self.ui.outputSelector.currentNode())
+      # retreive the list of branch ids to be clipped
+      branchClipList = []
+      for key in self.branchIdCheckBoxDict:
+        cb = self.branchIdCheckBoxDict[key]
+        if cb.checked:
+          branchClipList.append(key)
+        
+      outputSurfacePolyData = self.logic.clipBranches(inputSurfacePolyData,centerlinePolyData,self.ui.outputBranchModelSelector.currentNode(), branchClipList)
        
       inputSurfaceModelNode = self._parameterNode.GetNodeReference("InputModel")
-      outputModelNode = self._parameterNode.GetNodeReference("OutputModel")
-      if outputModelNode:
-                outputModelNode.SetAndObserveMesh(outputSurfacePolyData)
-                if not outputModelNode.GetDisplayNode():
-                    outputModelNode.CreateDefaultDisplayNodes()
-                    outputModelNode.GetDisplayNode().SetColor(0.0, 1.0, 0.0)
+      outputBranchModelNode = self._parameterNode.GetNodeReference("OutputBranchModel")
+      outputBranchIdListNode = self._parameterNode.GetNodeReference("OutputBranchIdList")
+      if outputBranchModelNode:
+                outputBranchModelNode.SetAndObserveMesh(outputSurfacePolyData)
+                if not outputBranchModelNode.GetDisplayNode():
+                    outputBranchModelNode.CreateDefaultDisplayNodes()
+                    outputBranchModelNode.GetDisplayNode().SetColor(0.0, 1.0, 0.0)
                     inputSurfaceModelNode.GetDisplayNode().SetOpacity(0.4)
     except Exception as e:
       slicer.util.errorDisplay("Failed to compute results: "+str(e))
@@ -273,14 +321,47 @@ class ClipBranchesLogic(ScriptedLoadableModuleLogic):
     else:
         logging.error("Surface can only be loaded from model or segmentation node")
         return None
-
-
-  def clipBranches(self, surfacePolyData, centerlinePolyData, outputModel, showResult=True):
+        
+  def getCenterlineGroup(self,centerlinePolyData,idx):
+    groupid = centerlinePolyData.GetCellData().GetArray('GroupIds').GetValue(idx)
+    line = centerlinePolyData.GetCell(idx)
+    pts = line.GetPoints()
+    pt = pts.GetPoint(line.GetNumberOfPoints()//2)
+    return (groupid, pt)
+        
+  
+  def computeCenterlineBranches(self,centerlinePolyData):
+    """
+    Compute the centerline branches
+    Can be used without the GUI widget.
+    :param centerlinePolyData: Centerline model of vessel
+    """
+    if not centerlinePolyData:
+      raise ValueError("Centerline model is invalid")
+    
+    try:
+      import vtkvmtkComputationalGeometryPython as vtkvmtkComputationalGeometry
+      
+    except ImportError:
+        raise ImportError("VMTK library is not found")
+    
+    branchExtractor = vtkvmtkComputationalGeometry.vtkvmtkCenterlineBranchExtractor()
+    branchExtractor.SetInputData(centerlinePolyData)
+    branchExtractor.SetBlankingArrayName(self.blankingArrayName)
+    branchExtractor.SetRadiusArrayName(self.radiusArrayName)
+    branchExtractor.SetGroupIdsArrayName(self.groupIdsArrayName)
+    branchExtractor.SetCenterlineIdsArrayName(self.centerlineIdsArrayName)
+    branchExtractor.SetTractIdsArrayName(self.tractIdsArrayName)
+    branchExtractor.Update()
+    centerlines = branchExtractor.GetOutput()
+    return centerlines
+    
+  def clipBranches(self, surfacePolyData, centerlinePolyData, outputModel, branchClipList, showResult=True):
     """
     Run the processing algorithm.
     Can be used without GUI widget.
-    :param inputModel: Vascular model from which the branches should be clipped
-    :param inputCenterlineModel: Centerline model of vessel with branches on which to base the clipping
+    :param surfacePolyData: Vascular model from which the branches should be clipped
+    :param centerlinePolyData: Centerline model of vessel with branches on which to base the clipping
     :param outputModel: resulting model with branches removed
     :param showResult: show output model in slice viewers
     """
@@ -310,28 +391,32 @@ class ClipBranchesLogic(ScriptedLoadableModuleLogic):
     branchExtractor.Update()
     centerlines = branchExtractor.GetOutput()
     
-    surfaceClipper = vtkvmtkComputationalGeometry.vtkvmtkPolyDataCenterlineGroupsClipper()
-    surfaceClipper.SetInputData(surfacePolyData)
-    surfaceClipper.SetCenterlines(centerlines)
-    surfaceClipper.SetCenterlineGroupIdsArrayName(self.groupIdsArrayName)
-    surfaceClipper.SetGroupIdsArrayName(self.groupIdsArrayName)
-    surfaceClipper.SetCenterlineRadiusArrayName(self.radiusArrayName)
-    surfaceClipper.SetBlankingArrayName(self.blankingArrayName)
-    surfaceClipper.SetCutoffRadiusFactor(1e16)
-    surfaceClipper.SetClipValue(0)
-    surfaceClipper.SetUseRadiusInformation(1)
-    surfaceClipper.SetGenerateClippedOutput(1)
-    groupIds = vtk.vtkIdList()
-    groupIds.InsertNextId(3)
-    surfaceClipper.SetCenterlineGroupIds(groupIds)
-    # clip all branches
-    #surfaceClipper.SetClipAllCenterlineGroupIds(1)
-    surfaceClipper.Update()
+    # there seems to be a bug in vtkvmtkPolyDatacenterlineGroupsClipper where you can only clip one branch at a time, when you try to clip multiple branches at once, nothing happens. THerefore clip the branches one by one in a loop.
+    surface = surfacePolyData
+    for i in branchClipList:
+      surfaceClipper = vtkvmtkComputationalGeometry.vtkvmtkPolyDataCenterlineGroupsClipper()
+      surfaceClipper.SetInputData(surface)
+      surfaceClipper.SetCenterlines(centerlines)
+      surfaceClipper.SetCenterlineGroupIdsArrayName(self.groupIdsArrayName)
+      surfaceClipper.SetGroupIdsArrayName(self.groupIdsArrayName)
+      surfaceClipper.SetCenterlineRadiusArrayName(self.radiusArrayName)
+      surfaceClipper.SetBlankingArrayName(self.blankingArrayName)
+      surfaceClipper.SetGenerateClippedOutput(1)
+      groupIds = vtk.vtkIdList()
+      groupIds.InsertNextId(i)
+      surfaceClipper.SetCenterlineGroupIds(groupIds)
+      surfaceClipper.SetClipAllCenterlineGroupIds(0)
+      #surfaceClipper.GenerateClippedOutputOff()
+      # clip all branches
+      #surfaceClipper.SetClipAllCenterlineGroupIds(1)
+      surfaceClipper.Update()
+      
+      surface = surfaceClipper.GetClippedOutput()
     
 
     outputSurfacePolyData = vtk.vtkPolyData()
     outputSurfacePolyData.DeepCopy(surfaceClipper.GetClippedOutput())
-
+    
     stopTime = time.time()
     logging.info('Processing completed in {0:.2f} seconds'.format(stopTime-startTime))
     
