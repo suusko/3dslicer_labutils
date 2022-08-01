@@ -2,7 +2,7 @@ import logging
 import os
 
 import vtk
-
+from vtk.numpy_interface import dataset_adapter as dsa
 import slicer
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
@@ -88,15 +88,17 @@ class OpenSurfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     # These connections ensure that whenever user changes some settings on the GUI, that is saved in the MRML scene
     # (in the selected parameter node).
-    self.ui.inputSurfaceSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
-    self.ui.inputCenterlineSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
-    self.ui.outputSurfaceSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
+    for nodeSelector, roleName in self.nodeSelectors:
+      nodeSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
    
+    self.ui.planeLocationWidget.connect('valueChanged(double)', self.updateParameterNodeFromGUI)
     # Buttons
     self.ui.applyButton.connect('clicked(bool)', self.onApplyButton)
     self.ui.showPlaneButton.connect('clicked(bool)', self.onShowPlaneButton)
+    
     # Make sure parameter node is initialized (needed for module reload)
     self.initializeParameterNode()
+    
 
   def cleanup(self):
     """
@@ -142,11 +144,7 @@ class OpenSurfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     self.setParameterNode(self.logic.getParameterNode())
 
-    # Select default input nodes if nothing is selected yet to save a few clicks for the user
-    if not self._parameterNode.GetNodeReference("InputSurface"):
-      firstModelNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLModelNode")
-      if firstModelNode:
-        self._parameterNode.SetNodeReferenceID("InputSurface", firstModelNode.GetID())
+   
 
   def setParameterNode(self, inputParameterNode):
     """
@@ -187,12 +185,22 @@ class OpenSurfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       
     # Update buttons states and tooltips
     
-    if self._parameterNode.GetNodeReference("InputSurface") and self._parameterNode.GetNodeReference("InputCenterline"):
+    if (self._parameterNode.GetNodeReference("InputSurface") and self._parameterNode.GetNodeReference("InputCenterline")):
       self.ui.showPlaneButton.toolTip = "Compute clipping plane"
       self.ui.showPlaneButton.enabled = True
+      if not self.ui.planeLocationWidget.enabled:
+        # set slider range based on number of centerline points
+        centerlineData = self.logic.polyDataFromNode(self._parameterNode.GetNodeReference("InputCenterline"))
+        npoints = centerlineData.GetNumberOfPoints()
+        
+        self.ui.planeLocationWidget.minimum = 0
+        self.ui.planeLocationWidget.maximum = npoints
+      #enable slider
+      self.ui.planeLocationWidget.enabled = True
     else:
       self.ui.showPlaneButton.toolTip = "Select input surface and centerline nodes"
       self.ui.showPlaneButton.enabled = False
+      self.ui.planeLocationWidget.enabled = False
 
     clipReady = False
     if clipReady:
@@ -202,6 +210,7 @@ class OpenSurfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.applyButton.toolTip = " to apply clip, first compute clipping plane"
       self.ui.applyButton.enabled = False
       
+    
     # All the GUI updates are done
     self._updatingGUIFromParameterNode = False
 
@@ -219,7 +228,7 @@ class OpenSurfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     for nodeSelector, roleName in self.nodeSelectors:
       self._parameterNode.SetNodeReferenceID(roleName, nodeSelector.currentNodeID)
    
-
+    self._parameterNode.SetParameter("SlicePlaneLocation", str(self.ui.planeLocationWidget.value))
     self._parameterNode.EndModify(wasModified)
 
 
@@ -231,26 +240,38 @@ class OpenSurfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       # retreive the centerline curve data
       inputCenterlinePolyData = self.logic.polyDataFromNode(self._parameterNode.GetNodeReference("InputCenterline"))
       
+     
+      
       # compute centerline normals and tangents
       self.centerlineGeometryPolyData = self.logic.computeCenterlineGeometry(inputCenterlinePolyData)
       
       # Todo: move this to logic class
-      from vtk.numpy_interface import dataset_adapter as dsa
+      
 
       pointdata = dsa.WrapDataObject(self.centerlineGeometryPolyData).PointData
       normaldata = pointdata['FrenetNormal']
       tangentdata = pointdata['FrenetTangent']
       points = dsa.WrapDataObject(self.centerlineGeometryPolyData).Points
-      print(pointdata.keys())
-      # create a plane normal to the centerline curve at the end location
-      planeNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsPlaneNode')
-      planeNode.SetCenter(points[10,:])
-      planeNode.SetNormal(tangentdata[10,:]) 
-      # make plane size slightly larger than the vessel diameter
-      planeSize = 2*pointdata['Radius'][10]*1.5
-      planeNode.SetSizeWorld(planeSize,planeSize)
-      # display the plane in the ui
       
+      # get the slider plane index 
+      plane_idx = int(float(self._parameterNode.GetParameter("SlicePlaneLocation")))
+      
+      # create/update the plane normal to the centerline curve at the indexed location
+      # create a plane normal to the centerline curve at the end location
+      planeNode = self._parameterNode.GetNodeReference("SlicePlane")
+      if not planeNode:
+        planeNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsPlaneNode')
+        if planeNode:
+          self._parameterNode.SetNodeReferenceID("SlicePlane",planeNode.GetID())
+        
+      planeNode.SetCenter(points[plane_idx,:])
+      planeNode.SetNormal(tangentdata[plane_idx,:]) 
+      # make plane size slightly larger than the vessel diameter
+      planeSize = 2*pointdata['Radius'][plane_idx]*1.5
+      planeNode.SetSizeWorld(planeSize,planeSize)
+      
+      # display the plane in the ui
+      # get the slider position
       
       # Todo: let the user select the location of the plane along the centerline curve either by mouseclick or through a slider
     
@@ -304,11 +325,9 @@ class OpenSurfaceLogic(ScriptedLoadableModuleLogic):
     """
     Initialize parameter node with default settings.
     """
-    if not parameterNode.GetParameter("Threshold"):
-      parameterNode.SetParameter("Threshold", "100.0")
-    if not parameterNode.GetParameter("Invert"):
-      parameterNode.SetParameter("Invert", "false")
-
+    if not parameterNode.GetParameter("SlicePlaneLocation"):
+      parameterNode.SetParameter("SlicePlaneLocation", "0")
+    
   def polyDataFromNode(self, surfaceNode):
     if not surfaceNode:
       logging.error("Invalid input surface node")
@@ -319,6 +338,8 @@ class OpenSurfaceLogic(ScriptedLoadableModuleLogic):
     else:
       logging.error("Surface can only be loaded from model or segmentation node")
       return None
+      
+        
       
   def computeCenterlineGeometry(self,centerlinePolyData):
     """
@@ -344,38 +365,6 @@ class OpenSurfaceLogic(ScriptedLoadableModuleLogic):
     return centerlineGeometry.GetOutput()
     
       
-  def process(self, inputVolume, outputVolume, imageThreshold, invert=False, showResult=True):
-    """
-    Run the processing algorithm.
-    Can be used without GUI widget.
-    :param inputVolume: volume to be thresholded
-    :param outputVolume: thresholding result
-    :param imageThreshold: values above/below this threshold will be set to 0
-    :param invert: if True then values above the threshold will be set to 0, otherwise values below are set to 0
-    :param showResult: show output volume in slice viewers
-    """
-
-    if not inputVolume or not outputVolume:
-      raise ValueError("Input or output volume is invalid")
-
-    import time
-    startTime = time.time()
-    logging.info('Processing started')
-
-    # Compute the thresholded output volume using the "Threshold Scalar Volume" CLI module
-    cliParams = {
-      'InputVolume': inputVolume.GetID(),
-      'OutputVolume': outputVolume.GetID(),
-      'ThresholdValue' : imageThreshold,
-      'ThresholdType' : 'Above' if invert else 'Below'
-      }
-    cliNode = slicer.cli.run(slicer.modules.thresholdscalarvolume, None, cliParams, wait_for_completion=True, update_display=showResult)
-    # We don't need the CLI module node anymore, remove it to not clutter the scene with it
-    slicer.mrmlScene.RemoveNode(cliNode)
-
-    stopTime = time.time()
-    logging.info(f'Processing completed in {stopTime-startTime:.2f} seconds')
-
 
 #
 # OpenSurfaceTest
