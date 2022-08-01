@@ -241,11 +241,14 @@ class OpenSurfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       normaldata = pointdata['FrenetNormal']
       tangentdata = pointdata['FrenetTangent']
       points = dsa.WrapDataObject(self.centerlineGeometryPolyData).Points
-
+      print(pointdata.keys())
       # create a plane normal to the centerline curve at the end location
       planeNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsPlaneNode')
-      planeNode.SetCenter(points[0,:])
-      planeNode.SetNormal(tangentdata[0,:]) 
+      planeNode.SetCenter(points[10,:])
+      planeNode.SetNormal(tangentdata[10,:]) 
+      # make plane size slightly larger than the vessel diameter
+      planeSize = 2*pointdata['Radius'][10]*1.5
+      planeNode.SetSizeWorld(planeSize,planeSize)
       # display the plane in the ui
       
       
