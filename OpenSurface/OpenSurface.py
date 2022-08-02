@@ -86,15 +86,18 @@ class OpenSurfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
 
+
     # These connections ensure that whenever user changes some settings on the GUI, that is saved in the MRML scene
     # (in the selected parameter node).
     for nodeSelector, roleName in self.nodeSelectors:
       nodeSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
    
-    self.ui.planeLocationWidget.connect('valueChanged(double)', self.updateParameterNodeFromGUI)
+    
     # Buttons
     self.ui.applyButton.connect('clicked(bool)', self.onApplyButton)
-    self.ui.showPlaneButton.connect('clicked(bool)', self.onShowPlaneButton)
+    
+    # slider
+    self.ui.planeLocationWidget.connect('valueChanged(double)', self.setCurrentPlaneIndex)
     
     # Make sure parameter node is initialized (needed for module reload)
     self.initializeParameterNode()
@@ -186,20 +189,16 @@ class OpenSurfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # Update buttons states and tooltips
     
     if (self._parameterNode.GetNodeReference("InputSurface") and self._parameterNode.GetNodeReference("InputCenterline")):
-      self.ui.showPlaneButton.toolTip = "Compute clipping plane"
-      self.ui.showPlaneButton.enabled = True
+      
       if not self.ui.planeLocationWidget.enabled:
         # set slider range based on number of centerline points
         centerlineData = self.logic.polyDataFromNode(self._parameterNode.GetNodeReference("InputCenterline"))
         npoints = centerlineData.GetNumberOfPoints()
-        
         self.ui.planeLocationWidget.minimum = 0
-        self.ui.planeLocationWidget.maximum = npoints
-      #enable slider
-      self.ui.planeLocationWidget.enabled = True
+        self.ui.planeLocationWidget.maximum = npoints-1
+        #enable slider
+        self.ui.planeLocationWidget.enabled = True
     else:
-      self.ui.showPlaneButton.toolTip = "Select input surface and centerline nodes"
-      self.ui.showPlaneButton.enabled = False
       self.ui.planeLocationWidget.enabled = False
 
     clipReady = False
@@ -228,36 +227,29 @@ class OpenSurfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     for nodeSelector, roleName in self.nodeSelectors:
       self._parameterNode.SetNodeReferenceID(roleName, nodeSelector.currentNodeID)
    
-    self._parameterNode.SetParameter("SlicePlaneLocation", str(self.ui.planeLocationWidget.value))
+    
     self._parameterNode.EndModify(wasModified)
 
 
-  def onShowPlaneButton(self):
-    """
-    Run processing when user clicks "showPlane" button.
-    """
+  def setCurrentPlaneIndex(self,value):
     with slicer.util.tryWithErrorDisplay("Failed to compute results.", waitCursor=True):
       # retreive the centerline curve data
       inputCenterlinePolyData = self.logic.polyDataFromNode(self._parameterNode.GetNodeReference("InputCenterline"))
-      
-     
       
       # compute centerline normals and tangents
       self.centerlineGeometryPolyData = self.logic.computeCenterlineGeometry(inputCenterlinePolyData)
       
       # Todo: move this to logic class
-      
-
+     
       pointdata = dsa.WrapDataObject(self.centerlineGeometryPolyData).PointData
       normaldata = pointdata['FrenetNormal']
       tangentdata = pointdata['FrenetTangent']
       points = dsa.WrapDataObject(self.centerlineGeometryPolyData).Points
-      
+      print(pointdata.keys())
       # get the slider plane index 
       plane_idx = int(float(self._parameterNode.GetParameter("SlicePlaneLocation")))
       
       # create/update the plane normal to the centerline curve at the indexed location
-      # create a plane normal to the centerline curve at the end location
       planeNode = self._parameterNode.GetNodeReference("SlicePlane")
       if not planeNode:
         planeNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsPlaneNode')
@@ -270,12 +262,11 @@ class OpenSurfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       planeSize = 2*pointdata['Radius'][plane_idx]*1.5
       planeNode.SetSizeWorld(planeSize,planeSize)
       
-      # display the plane in the ui
-      # get the slider position
-      
       # Todo: let the user select the location of the plane along the centerline curve either by mouseclick or through a slider
     
     
+    self._parameterNode.SetParameter("SlicePlaneLocation", str(self.ui.planeLocationWidget.value))
+   
   def onApplyButton(self):
     """
     Run processing when user clicks "Apply" button.

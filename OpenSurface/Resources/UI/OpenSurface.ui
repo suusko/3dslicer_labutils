@@ -117,12 +117,9 @@
     </widget>
    </item>
    <item>
-    <widget class="QPushButton" name="showPlaneButton">
-     <property name="enabled">
-      <bool>false</bool>
-     </property>
+    <widget class="QLabel" name="label_4">
      <property name="text">
-      <string>Show Clipping Plane</string>
+      <string>Select clipping plane:</string>
      </property>
     </widget>
    </item>
