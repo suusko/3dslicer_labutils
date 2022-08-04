@@ -6,7 +6,7 @@ from vtk.numpy_interface import dataset_adapter as dsa
 import slicer
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
-
+import numpy as np
 
 #
 # OpenSurface
@@ -245,14 +245,16 @@ class OpenSurfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       normaldata = pointdata['FrenetNormal']
       tangentdata = pointdata['FrenetTangent']
       points = dsa.WrapDataObject(self.centerlineGeometryPolyData).Points
-      print(pointdata.keys())
+      
       # get the slider plane index 
       plane_idx = int(float(self._parameterNode.GetParameter("SlicePlaneLocation")))
       
       # create/update the plane normal to the centerline curve at the indexed location
       planeNode = self._parameterNode.GetNodeReference("SlicePlane")
       if not planeNode:
-        planeNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsPlaneNode')
+        planeNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsPlaneNode',"SlicePlane")
+        #planeNode.SetDisplayVisibility(0)
+        planeNode.SetHideFromEditors(1)
         if planeNode:
           self._parameterNode.SetNodeReferenceID("SlicePlane",planeNode.GetID())
         
@@ -261,11 +263,94 @@ class OpenSurfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       # make plane size slightly larger than the vessel diameter
       planeSize = 2*pointdata['Radius'][plane_idx]*1.5
       planeNode.SetSizeWorld(planeSize,planeSize)
+     
+      # get plane corner points for registration
+      planeCorners = vtk.vtkPoints()
+      planeNode.GetPlaneCornerPoints(planeCorners)
+      #print(planeCorners.GetPoint(0))
+      roiNode = self._parameterNode.GetNodeReference("ROIBox")
+      if not roiNode:
+        roiNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsROINode',"ROIBox")
+        if roiNode:
+          self._parameterNode.SetNodeReferenceID("ROIBox", roiNode.GetID())
+          
+      # location and size of roi
+      roiNode.SetCenter(points[plane_idx,:])
+      roiNode.SetSizeWorld(planeSize,planeSize,planeSize)
       
-      # Todo: let the user select the location of the plane along the centerline curve either by mouseclick or through a slider
-    
-    
-    self._parameterNode.SetParameter("SlicePlaneLocation", str(self.ui.planeLocationWidget.value))
+       # get the plane normals
+      roiPlanes = vtk.vtkPlanes()
+      roiNode.GetPlanes(roiPlanes)
+     
+      roiPlane0 = roiPlanes.GetPlane(0)
+      # convert one of the roi planes to markupplane  for registration
+      planeROINode = self._parameterNode.GetNodeReference("ROIPlane")
+      if not planeROINode:
+        planeROINode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsPlaneNode',"ROIPlane")
+        planeROINode.SetDisplayVisibility(0)
+        planeROINode.SetHideFromEditors(1)
+        if planeROINode:
+          self._parameterNode.SetNodeReferenceID("ROIPlane",planeROINode.GetID())
+        
+      planeROINode.SetCenter(roiPlane0.GetOrigin())
+      planeROINode.SetNormal(roiPlane0.GetNormal()) 
+      # make plane size slightly larger than the vessel diameter
+      planeROINode.SetSizeWorld(planeSize,planeSize)
+      
+      planeROICorners = vtk.vtkPoints()
+      planeROINode.GetPlaneCornerPoints(planeROICorners)
+      
+      # register the centerline normal and one of the roi plane normals to obtain transformation matrix
+      #create landmarks
+      fixedLandmarksNode = self._parameterNode.GetNodeReference("CenterlineNormalVector")
+      if not fixedLandmarksNode:
+        fixedLandmarksNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode","CenterlineNormalVector")
+        fixedLandmarksNode.SetDisplayVisibility(0)
+        fixedLandmarksNode.SetHideFromEditors(1)
+        fixedLandmarksNode.AddControlPoint(points[plane_idx,:])
+        fixedLandmarksNode.AddControlPoint(points[plane_idx,0]+tangentdata[plane_idx,0],points[plane_idx,1]+tangentdata[plane_idx,1],points[plane_idx,2]+tangentdata[plane_idx,2])
+        fixedLandmarksNode.AddControlPoint(planeCorners.GetPoint(0))
+        if fixedLandmarksNode:
+          self._parameterNode.SetNodeReferenceID("CenterlineNormalVector",fixedLandmarksNode.GetID())
+      else:
+        fixedLandmarksNode.SetNthControlPointPosition(0,points[plane_idx,:])
+        fixedLandmarksNode.SetNthControlPointPosition(1,points[plane_idx,:]+tangentdata[plane_idx,:])
+        fixedLandmarksNode.SetNthControlPointPosition(2,planeCorners.GetPoint(0))    
+      
+     
+      movingLandmarksNode = self._parameterNode.GetNodeReference("ROIPlaneNormalVector")
+      if not movingLandmarksNode:
+        movingLandmarksNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode","ROIPlaneNormalVector")
+        movingLandmarksNode.SetDisplayVisibility(0)
+        movingLandmarksNode.SetHideFromEditors(1)
+        movingLandmarksNode.AddControlPoint(roiPlane0.GetOrigin())
+        movingLandmarksNode.AddControlPoint(np.subtract(roiPlane0.GetOrigin(),roiPlane0.GetNormal()))
+        movingLandmarksNode.AddControlPoint(planeROICorners.GetPoint(0))
+        if movingLandmarksNode:
+          self._parameterNode.SetNodeReferenceID("ROIPlaneNormalVector", movingLandmarksNode.GetID())
+      else:
+        movingLandmarksNode.SetNthControlPointPosition(0,roiPlane0.GetOrigin())
+        movingLandmarksNode.SetNthControlPointPosition(1,np.subtract(roiPlane0.GetOrigin(), roiPlane0.GetNormal()))
+        movingLandmarksNode.SetNthControlPointPosition(2,planeROICorners.GetPoint(0))
+     
+      parameters = {}
+      parameters["fixedLandmarks"] = fixedLandmarksNode
+      parameters["movingLandmarks"] = movingLandmarksNode
+      saveTransform = self._parameterNode.GetNodeReference("ROIToCenterlineTransform") 
+      if not saveTransform:
+        saveTransform = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode","ROIToCenterlineTransform")
+        if saveTransform:
+          self._parameterNode.SetNodeReferenceID("ROIToCenterlineTransform", saveTransform.GetID())
+      parameters["saveTransform"] = saveTransform.GetID()
+      parameters["transformType"] = "Rigid"
+      fiducialRegistration = slicer.modules.fiducialregistration
+      slicer.cli.run(fiducialRegistration, None, parameters, wait_for_completion=True)
+      
+      # apply transform to ROI box
+      roiNode.SetAndObserveTransformNodeID(saveTransform.GetID())
+      roiNode.HardenTransform()
+      
+      self._parameterNode.SetParameter("SlicePlaneLocation", str(self.ui.planeLocationWidget.value))
    
   def onApplyButton(self):
     """
