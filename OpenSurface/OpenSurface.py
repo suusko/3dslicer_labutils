@@ -197,16 +197,19 @@ class OpenSurfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.planeLocationWidget.minimum = 0
         self.ui.planeLocationWidget.maximum = npoints-1
         #enable slider
-        self.ui.planeLocationWidget.enabled = True
+        self.ui.planeLocationWidget.enabled = True 
+        
+        
     else:
+      #disable slider
       self.ui.planeLocationWidget.enabled = False
-
-    clipReady = False
-    if clipReady:
-      self.ui.applyButton.toolTip = "Clip surface with plane" 
+       
+      
+    if self._parameterNode.GetNodeReference("OpenSurface_ROIBox"):
+      self.ui.applyButton.toolTip = "Clip surface with ROI" 
       self.ui.applyButton.enabled = True
     else:
-      self.ui.applyButton.toolTip = " to apply clip, first compute clipping plane"
+      self.ui.applyButton.toolTip = " to apply clip, first place ROI"
       self.ui.applyButton.enabled = False
       
     
@@ -232,6 +235,10 @@ class OpenSurfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
 
   def setCurrentPlaneIndex(self,value):
+  
+    # store the current slice index to the parameter node
+    self._parameterNode.SetParameter("SlicePlaneLocation", str(self.ui.planeLocationWidget.value))
+      
     with slicer.util.tryWithErrorDisplay("Failed to compute results.", waitCursor=True):
       # retreive the centerline curve data
       inputCenterlinePolyData = self.logic.polyDataFromNode(self._parameterNode.GetNodeReference("InputCenterline"))
@@ -266,8 +273,6 @@ class OpenSurfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       slicer.mrmlScene.RemoveNode(planeNode)
       slicer.mrmlScene.RemoveNode(planeROINode)
       
-      # store the current slice index to the parameter node
-      self._parameterNode.SetParameter("SlicePlaneLocation", str(self.ui.planeLocationWidget.value))
       
    
   def onApplyButton(self):
@@ -276,17 +281,12 @@ class OpenSurfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     with slicer.util.tryWithErrorDisplay("Failed to compute results.", waitCursor=True):
 
-      # Compute output
-      self.logic.process(self.ui.inputSelector.currentNode(), self.ui.outputSelector.currentNode(),
-        self.ui.imageThresholdSliderWidget.value, self.ui.invertOutputCheckBox.checked)
-
-      # Compute inverted output (if needed)
-      if self.ui.invertedOutputSelector.currentNode():
-        # If additional output volume is selected then result with inverted threshold is written there
-        self.logic.process(self.ui.inputSelector.currentNode(), self.ui.invertedOutputSelector.currentNode(),
-          self.ui.imageThresholdSliderWidget.value, not self.ui.invertOutputCheckBox.checked, showResult=False)
-    
-
+      # clip the model using the markupsROINode. Use the dynamic modeler module's ROI cut tool fo this.
+      modelNode = self._parameterNode.GetNodeReference("InputSurface")
+      roiNode = self._parameterNode.GetNodeReference("OpenSurface_ROIBox")
+      outputNode = self._parameterNode.GetNodeReference("OutputSurface")      
+      self.logic.clipROIFromModel(modelNode,roiNode,outputNode)
+     
 #
 # OpenSurfaceLogic
 #
@@ -307,9 +307,6 @@ class OpenSurfaceLogic(ScriptedLoadableModuleLogic):
     """
     ScriptedLoadableModuleLogic.__init__(self)
     
-    self.parameterNode = None
-    
-    
     self.lengthArrayName = 'Length'
     self.curvatureArrayName = 'Curvature'
     self.torsionArrayName = 'Torsion'
@@ -318,11 +315,6 @@ class OpenSurfaceLogic(ScriptedLoadableModuleLogic):
     self.frenetNormalArrayName = 'FrenetNormal'
     self.frenetBinormalArrayName = 'FrenetBinormal'
   
-  def getParameterNode(self):
-    """ Returns the current parameter node and creates one if it doesn't exist yet"""
-    if not self.parameterNode:
-      self.setParameterNode( ScriptedLoadableModuleLogic.getParameterNode(self) )
-    return self.parameterNode
     
   def setParameterNode(self, parameterNode):
     """ Set the current parameter node and initialize all unset parameters to their default values """
@@ -485,7 +477,19 @@ class OpenSurfaceLogic(ScriptedLoadableModuleLogic):
     
     #remove transform node
     slicer.mrmlScene.RemoveNode(transformNode)
-    
+  
+  def clipROIFromModel(self,inputModelNode,inputROINode,outputModelNode):
+    """ Clip a model with a ROI
+    """
+    dynamicModelerNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLDynamicModelerNode")
+    dynamicModelerNode.SetHideFromEditors(1)
+    dynamicModelerNode.SetToolName("ROI cut")
+    dynamicModelerNode.SetNodeReferenceID("ROICut.InputModel", inputModelNode.GetID())
+    dynamicModelerNode.SetNodeReferenceID("ROICut.InputROI", inputROINode.GetID())
+    dynamicModelerNode.SetNodeReferenceID("ROICut.OutputNegativeModel", outputModelNode.GetID())
+    slicer.modules.dynamicmodeler.logic().RunDynamicModelerTool(dynamicModelerNode)
+
+
 #
 # OpenSurfaceTest
 #
