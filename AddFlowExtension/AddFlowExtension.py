@@ -84,12 +84,14 @@ class AddFlowExtensionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.inputSurfaceSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
     self.ui.inputCenterlineSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
     self.ui.outputSurfaceSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
+    self.ui.extensionLengthSpinBox.connect("valueChanged(double)", self.updateParameterNodeFromGUI)
     self.ui.selectOpenBoundariesCheckBox.connect("stateChanged(int)",self.onSelectOpenBoundariesStateChanged)
     # Buttons
     self.ui.applyButton.connect('clicked(bool)', self.onApplyButton)
 
     # Make sure parameter node is initialized (needed for module reload)
     self.initializeParameterNode()
+    
 
   def cleanup(self):
     """
@@ -178,6 +180,7 @@ class AddFlowExtensionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.inputSurfaceSelector.setCurrentNode(self._parameterNode.GetNodeReference("InputSurface"))
     self.ui.inputCenterlineSelector.setCurrentNode(self._parameterNode.GetNodeReference("InputCenterline"))
     self.ui.outputSurfaceSelector.setCurrentNode(self._parameterNode.GetNodeReference("OutputSurface"))
+    self.ui.extensionLengthSpinBox.value = float(self._parameterNode.GetParameter("ExtensionLength"))
     
     # Update buttons states and tooltips
     if self._parameterNode.GetNodeReference("InputSurface") and self._parameterNode.GetNodeReference("InputCenterline") and self._parameterNode.GetNodeReference("OutputSurface"):
@@ -204,9 +207,10 @@ class AddFlowExtensionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self._parameterNode.SetNodeReferenceID("InputSurface", self.ui.inputSurfaceSelector.currentNodeID)
     self._parameterNode.SetNodeReferenceID("InputCenterline", self.ui.inputCenterlineSelector.currentNodeID)
     self._parameterNode.SetNodeReferenceID("OutputSurface", self.ui.outputSurfaceSelector.currentNodeID)
-   
+    self._parameterNode.SetParameter("ExtensionLength",str(self.ui.extensionLengthSpinBox.value))
+    print('GUI')
     self._parameterNode.EndModify(wasModified)
-
+    
   def onApplyButton(self):
     """
     Run processing when user clicks "Apply" button.
@@ -225,9 +229,10 @@ class AddFlowExtensionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
           cb = self.openBoundariesCheckBoxDict[key]
           if cb.checked:
             openBoundsIdList.append(key)
-        
+       
+      extensionLength = float(self._parameterNode.GetParameter("ExtensionLength"))
       
-      outputSurfacePolyData = self.logic.addFlowExtensions(inputSurfacePolyData, inputCenterlinePolyData, openBoundsIdList)
+      outputSurfacePolyData = self.logic.addFlowExtensions(inputSurfacePolyData, inputCenterlinePolyData, openBoundsIdList,extensionLength)
       
       outputSurfaceNode = self._parameterNode.GetNodeReference("OutputSurface")
       if outputSurfaceNode:
@@ -311,6 +316,8 @@ class AddFlowExtensionLogic(ScriptedLoadableModuleLogic):
     """
     Initialize parameter node with default settings.
     """
+    if not parameterNode.GetParameter("ExtensionLength"):
+      parameterNode.SetParameter("ExtensionLength","5.0")
     return
   
   def polyDataFromNode(self, surfaceNode):
@@ -347,7 +354,7 @@ class AddFlowExtensionLogic(ScriptedLoadableModuleLogic):
     
     return seedPolyData
     
-  def addFlowExtensions(self, inputSurfacePolyData, inputCenterlinePolyData, boundaryIds=None):
+  def addFlowExtensions(self, inputSurfacePolyData, inputCenterlinePolyData, boundaryIds=None,extensionLength=None):
     """
     Run the processing algorithm.
     Can be used without GUI widget.
@@ -368,7 +375,8 @@ class AddFlowExtensionLogic(ScriptedLoadableModuleLogic):
     flowExtensionsFilter.SetAdaptiveExtensionRadius(1) # bool
     flowExtensionsFilter.SetAdaptiveNumberOfBoundaryPoints(0) # bool,default value
     flowExtensionsFilter.SetExtensionLength(1) # default value 
-    flowExtensionsFilter.SetExtensionRatio(5) # proportionality factor, how much is the extension length extended 
+    if extensionLength:
+      flowExtensionsFilter.SetExtensionRatio(extensionLength) # proportionality factor, how much is the extension length extended 
     flowExtensionsFilter.SetExtensionRadius(1) # float, ?
     flowExtensionsFilter.SetTransitionRatio(0.25) # default value, ratio with which the extension changes to circular boundary
     flowExtensionsFilter.SetCenterlineNormalEstimationDistanceRatio(1.0) #default value, controls how far into the centerline the algorithm looks for computing the orientation of the flow extension.
