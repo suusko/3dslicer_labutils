@@ -126,14 +126,14 @@
         </property>
        </widget>
       </item>
-      <item row="2" column="0">
+      <item row="3" column="0">
        <widget class="QLabel" name="label_4">
         <property name="text">
          <string>Select open boundaries:</string>
         </property>
        </widget>
       </item>
-      <item row="2" column="1">
+      <item row="3" column="1">
        <widget class="QCheckBox" name="selectOpenBoundariesCheckBox">
         <property name="enabled">
          <bool>true</bool>
@@ -159,6 +159,20 @@
         </property>
         <property name="value">
          <double>5.000000000000000</double>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="0">
+       <widget class="QLabel" name="label_6">
+        <property name="text">
+         <string>Add caps:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="1">
+       <widget class="ctkCheckBox" name="addCapsCheckBox">
+        <property name="toolTip">
+         <string>If checked, add caps to all open boundaries. If unchecked, do not add caps to open boundaries</string>
         </property>
        </widget>
       </item>
@@ -194,6 +208,11 @@
   </layout>
  </widget>
  <customwidgets>
+  <customwidget>
+   <class>ctkCheckBox</class>
+   <extends>QCheckBox</extends>
+   <header>ctkCheckBox.h</header>
+  </customwidget>
   <customwidget>
    <class>ctkCollapsibleButton</class>
    <extends>QWidget</extends>

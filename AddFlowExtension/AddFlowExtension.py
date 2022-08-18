@@ -86,6 +86,7 @@ class AddFlowExtensionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.outputSurfaceSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
     self.ui.extensionLengthSpinBox.connect("valueChanged(double)", self.updateParameterNodeFromGUI)
     self.ui.selectOpenBoundariesCheckBox.connect("stateChanged(int)",self.onSelectOpenBoundariesStateChanged)
+    self.ui.addCapsCheckBox.connect("stateChanged(int)",self.updateParameterNodeFromGUI)
     # Buttons
     self.ui.applyButton.connect('clicked(bool)', self.onApplyButton)
 
@@ -190,6 +191,12 @@ class AddFlowExtensionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.applyButton.toolTip = "Select input and output model nodes"
       self.ui.applyButton.enabled = False
 
+    # do not block signals so that related widgets are enabled/disabled according to its state
+    self.ui.selectOpenBoundariesCheckBox.checked = (self._parameterNode.GetParameter("SelectOpenBoundaries") == "true")
+
+    self.ui.addCapsCheckBox.checked = (self._parameterNode.GetParameter("AddCaps") == "true")
+
+
     # All the GUI updates are done
     self._updatingGUIFromParameterNode = False
 
@@ -208,7 +215,7 @@ class AddFlowExtensionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self._parameterNode.SetNodeReferenceID("InputCenterline", self.ui.inputCenterlineSelector.currentNodeID)
     self._parameterNode.SetNodeReferenceID("OutputSurface", self.ui.outputSurfaceSelector.currentNodeID)
     self._parameterNode.SetParameter("ExtensionLength",str(self.ui.extensionLengthSpinBox.value))
-    print('GUI')
+    self._parameterNode.SetParameter("AddCaps", "true" if self.ui.addCapsCheckBox.checked else "false")
     self._parameterNode.EndModify(wasModified)
     
   def onApplyButton(self):
@@ -221,8 +228,9 @@ class AddFlowExtensionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       inputSurfacePolyData = self.logic.polyDataFromNode(self.ui.inputSurfaceSelector.currentNode())
       inputCenterlinePolyData = self.logic.polyDataFromNode(self.ui.inputCenterlineSelector.currentNode())
       
+      selectOpenBoundaries = (self._parameterNode.GetParameter("SelectOpenBoundaries") == "true")
       openBoundsIdList = None
-      if self.ui.selectOpenBoundariesCheckBox.isChecked():
+      if selectOpenBoundaries:
         # get the ids of the open boundaries to extend
         openBoundsIdList = []
         for key in self.openBoundariesCheckBoxDict:
@@ -234,14 +242,21 @@ class AddFlowExtensionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       
       outputSurfacePolyData = self.logic.addFlowExtensions(inputSurfacePolyData, inputCenterlinePolyData, openBoundsIdList,extensionLength)
       
-      outputSurfaceNode = self._parameterNode.GetNodeReference("OutputSurface")
-      if outputSurfaceNode:
-        outputSurfaceNode.SetAndObserveMesh(outputSurfacePolyData)
-
+      
+    
+    addCaps = (self._parameterNode.GetParameter("AddCaps") == "true")
+    if addCaps:
+      outputSurfacePolyData = self.logic.addCaps(outputSurfacePolyData)
+      
+    outputSurfaceNode = self._parameterNode.GetNodeReference("OutputSurface")
+    if outputSurfaceNode:
+      outputSurfaceNode.SetAndObserveMesh(outputSurfacePolyData)  
 
   # this function is called when checkbox "select open boundaries"  changes state
   def onSelectOpenBoundariesStateChanged(self):
-  
+    
+    self._parameterNode.SetParameter("SelectOpenBoundaries", "true" if self.ui.selectOpenBoundariesCheckBox.checked else "false")
+    
     selectOpenBoundaries = self.ui.selectOpenBoundariesCheckBox.isChecked()
     if selectOpenBoundaries:
       # show the id's of the open boundaries to which flow extensions can be added
@@ -318,6 +333,10 @@ class AddFlowExtensionLogic(ScriptedLoadableModuleLogic):
     """
     if not parameterNode.GetParameter("ExtensionLength"):
       parameterNode.SetParameter("ExtensionLength","5.0")
+    if not parameterNode.GetParameter("SelectOpenBoundaries"):
+      parameterNode.SetParameter("SelectOpenBoundaries", "true")
+    if not parameterNode.GetParameter("AddCaps"):
+      parameterNode.SetParameter("AddCaps", "false")
     return
   
   def polyDataFromNode(self, surfaceNode):
@@ -362,7 +381,7 @@ class AddFlowExtensionLogic(ScriptedLoadableModuleLogic):
     :param inputCenterlinePolyData: Polydata centerline to use for the direction of the flow extensions
     """
     import vtkvmtkComputationalGeometryPython as vtkvmtkComputationalGeometry
-
+   
     if not inputSurfacePolyData or not inputCenterlinePolyData:
       raise ValueError("Input Surface, input Centerline, or output surface is invalid")
 
@@ -392,6 +411,19 @@ class AddFlowExtensionLogic(ScriptedLoadableModuleLogic):
     flowExtensionsFilter.Update()
     
     return flowExtensionsFilter.GetOutput()
+  
+  def addCaps(self, surfacePolyData):
+    import vtkvmtkMiscPython as vtkvmtkMisc
+    
+    if not surfacePolyData:
+      raise ValueError("Input Surface is invalid")
+      
+    addCapsFilter = vtkvmtkMisc.vtkvmtkSimpleCapPolyData()
+    addCapsFilter.SetInputData(surfacePolyData)
+    addCapsFilter.Update()
+    
+    return addCapsFilter.GetOutput()
+    
 #
 # AddFlowExtensionTest
 #
