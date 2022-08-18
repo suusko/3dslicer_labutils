@@ -243,20 +243,22 @@ class AddFlowExtensionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       # compute locations of the open boundaries
       inputSurfacePolyData = self.logic.polyDataFromNode(self.ui.inputSurfaceSelector.currentNode())
       
+      # get the barycenters of the open boundaries
       barycenterPolyData = self.logic.getOpenBoundariesBarycenters(inputSurfacePolyData)
       
+      # creat/ get reference to markup node to display the boundary ids at the barycenters
       openBoundariesIdsMarkupsNode = self._parameterNode.GetNodeReference("OpenBoundariesIds")
-      
       if not openBoundariesIdsMarkupsNode:
         openBoundariesIdsMarkupsNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode","OpenBoundariesIds")
         if openBoundariesIdsMarkupsNode:
           self._parameterNode.SetNodeReferenceID("OpenBoundariesIds",openBoundariesIdsMarkupsNode.GetID())
       else:
+        # the node already exists, so empty it to fill it with the current barycenters 
         # empty the node
         openBoundariesIdsMarkupsNode.RemoveAllMarkups()
         
+      # add markups corresonding to the barycenters of the open boundaries with the boundary id as label
       openbounds_ids = []
-      
       for i in range(barycenterPolyData.GetNumberOfPoints()):
         point = barycenterPolyData.GetPoint(i)
         
@@ -265,22 +267,18 @@ class AddFlowExtensionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         openbounds_ids.append(i)
         
       # now create checkboxes so the user can select which open boundaries to extend
-      hlayout = qt.QHBoxLayout()
-      ncols = 6
-      nrows = math.ceil(len(openbounds_ids)/ncols)
+      hlayout = qt.QHBoxLayout() # horizontal layout to hold the checkboxes
       self.openBoundariesCheckBoxDict={}
       for (i,id) in enumerate(openbounds_ids):
         newCheckBox = ctk.ctkCheckBox()
         newCheckBox.text=str(id)
         self.openBoundariesCheckBoxDict[id] = newCheckBox
-        row = i//ncols+2
-        col = i%ncols
+        hlayout.addWidget(newCheckBox) # add checkbox widget to layout
         
-        hlayout.addWidget(newCheckBox)
+      # add layout with checkboxes to parent layout       
       self.ui.formLayout.addRow("id:",hlayout)
     else:
-      print('false')
-      # remove the open boundaries markupsnode
+      # remove the open boundaries markupsnode and related variables, if it exists
       openBoundariesIdsMarkupsNode = self._parameterNode.GetNodeReference("OpenBoundariesIds")
       if openBoundariesIdsMarkupsNode:
         self.openBoundariesCheckBoxDict={}
@@ -330,10 +328,10 @@ class AddFlowExtensionLogic(ScriptedLoadableModuleLogic):
     # based on code in https://github.com/vmtk/vmtk/blob/master/vmtkScripts/vmtkflowextensions.py
     import vtkvmtkComputationalGeometryPython as vtkvmtkComputationalGeometry
     
+    
     boundaryExtractor = vtkvmtkComputationalGeometry.vtkvmtkPolyDataBoundaryExtractor()
     boundaryExtractor.SetInputData(surfacePolyData)
     boundaryExtractor.Update()
-    
     boundaries = boundaryExtractor.GetOutput()
     numberOfBoundaries = boundaries.GetNumberOfCells()
     
