@@ -1,8 +1,9 @@
 import logging
 import os
-
+import math
 import vtk
-
+import ctk
+import qt
 import slicer
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
@@ -83,7 +84,7 @@ class AddFlowExtensionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.inputSurfaceSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
     self.ui.inputCenterlineSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
     self.ui.outputSurfaceSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
-    
+    self.ui.selectOpenBoundariesCheckBox.connect("stateChanged(int)",self.onSelectOpenBoundariesStateChanged)
     # Buttons
     self.ui.applyButton.connect('clicked(bool)', self.onApplyButton)
 
@@ -216,12 +217,78 @@ class AddFlowExtensionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       inputSurfacePolyData = self.logic.polyDataFromNode(self.ui.inputSurfaceSelector.currentNode())
       inputCenterlinePolyData = self.logic.polyDataFromNode(self.ui.inputCenterlineSelector.currentNode())
       
-      outputSurfacePolyData = self.logic.addFlowExtensions(inputSurfacePolyData, inputCenterlinePolyData)
+      openBoundsIdList = None
+      if self.ui.selectOpenBoundariesCheckBox.isChecked():
+        # get the ids of the open boundaries to extend
+        openBoundsIdList = []
+        for key in self.openBoundariesCheckBoxDict:
+          cb = self.openBoundariesCheckBoxDict[key]
+          if cb.checked:
+            openBoundsIdList.append(key)
+        
+      
+      outputSurfacePolyData = self.logic.addFlowExtensions(inputSurfacePolyData, inputCenterlinePolyData, openBoundsIdList)
       
       outputSurfaceNode = self._parameterNode.GetNodeReference("OutputSurface")
       if outputSurfaceNode:
         outputSurfaceNode.SetAndObserveMesh(outputSurfacePolyData)
 
+
+  # this function is called when checkbox "select open boundaries"  changes state
+  def onSelectOpenBoundariesStateChanged(self):
+  
+    selectOpenBoundaries = self.ui.selectOpenBoundariesCheckBox.isChecked()
+    if selectOpenBoundaries:
+      # show the id's of the open boundaries to which flow extensions can be added
+      # compute locations of the open boundaries
+      inputSurfacePolyData = self.logic.polyDataFromNode(self.ui.inputSurfaceSelector.currentNode())
+      
+      barycenterPolyData = self.logic.getOpenBoundariesBarycenters(inputSurfacePolyData)
+      
+      openBoundariesIdsMarkupsNode = self._parameterNode.GetNodeReference("OpenBoundariesIds")
+      
+      if not openBoundariesIdsMarkupsNode:
+        openBoundariesIdsMarkupsNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode","OpenBoundariesIds")
+        if openBoundariesIdsMarkupsNode:
+          self._parameterNode.SetNodeReferenceID("OpenBoundariesIds",openBoundariesIdsMarkupsNode.GetID())
+      else:
+        # empty the node
+        openBoundariesIdsMarkupsNode.RemoveAllMarkups()
+        
+      openbounds_ids = []
+      
+      for i in range(barycenterPolyData.GetNumberOfPoints()):
+        point = barycenterPolyData.GetPoint(i)
+        
+        n = openBoundariesIdsMarkupsNode.AddFiducial(point[0],point[1],point[2])
+        openBoundariesIdsMarkupsNode.SetNthControlPointLabel(n,str(i))
+        openbounds_ids.append(i)
+        
+      # now create checkboxes so the user can select which open boundaries to extend
+      hlayout = qt.QHBoxLayout()
+      ncols = 6
+      nrows = math.ceil(len(openbounds_ids)/ncols)
+      self.openBoundariesCheckBoxDict={}
+      for (i,id) in enumerate(openbounds_ids):
+        newCheckBox = ctk.ctkCheckBox()
+        newCheckBox.text=str(id)
+        self.openBoundariesCheckBoxDict[id] = newCheckBox
+        row = i//ncols+2
+        col = i%ncols
+        
+        hlayout.addWidget(newCheckBox)
+      self.ui.formLayout.addRow("id:",hlayout)
+    else:
+      print('false')
+      # remove the open boundaries markupsnode
+      openBoundariesIdsMarkupsNode = self._parameterNode.GetNodeReference("OpenBoundariesIds")
+      if openBoundariesIdsMarkupsNode:
+        self.openBoundariesCheckBoxDict={}
+        idx = self.ui.formLayout.rowCount()
+        self.ui.formLayout.removeRow(idx-1)
+        slicer.mrmlScene.RemoveNode(openBoundariesIdsMarkupsNode)
+      
+    
 #
 # AddFlowExtensionLogic
 #
@@ -257,28 +324,31 @@ class AddFlowExtensionLogic(ScriptedLoadableModuleLogic):
     else:
       logging.error("Surface can only be loaded from model node")
       return None
-  
-  def extractBoundariesFromSurface(self, inputSurfacePolyData):
-    """
-    Number and display the boundaries of a surface with open boundaries
-    """
+    
+  def getOpenBoundariesBarycenters(self, surfacePolyData):
+    """ compute the barycenters of the open boundaries of a surface """
+    # based on code in https://github.com/vmtk/vmtk/blob/master/vmtkScripts/vmtkflowextensions.py
     import vtkvmtkComputationalGeometryPython as vtkvmtkComputationalGeometry
     
-    # based on code in https://github.com/vmtk/vmtk/blob/master/vmtkScripts/vmtkflowextensions.py
     boundaryExtractor = vtkvmtkComputationalGeometry.vtkvmtkPolyDataBoundaryExtractor()
-    boundaryExtractor.SetInputData(inputSurfacePolyData)
+    boundaryExtractor.SetInputData(surfacePolyData)
     boundaryExtractor.Update()
+    
     boundaries = boundaryExtractor.GetOutput()
     numberOfBoundaries = boundaries.GetNumberOfCells()
+    
     seedPoints = vtk.vtkPoints()
+   
     for i in range(numberOfBoundaries):
       barycenter = [0.0, 0.0, 0.0]
       vtkvmtkComputationalGeometry.vtkvmtkBoundaryReferenceSystems.ComputeBoundaryBarycenter(boundaries.GetCell(i).GetPoints(),barycenter)
-      print(barycenter)
       seedPoints.InsertNextPoint(barycenter)
+      
     seedPolyData = vtk.vtkPolyData()
     seedPolyData.SetPoints(seedPoints)
-
+    
+    return seedPolyData
+    
   def addFlowExtensions(self, inputSurfacePolyData, inputCenterlinePolyData, boundaryIds=None):
     """
     Run the processing algorithm.
@@ -309,7 +379,10 @@ class AddFlowExtensionLogic(ScriptedLoadableModuleLogic):
     flowExtensionsFilter.SetExtensionModeToUseCenterlineDirection()
     # set the boundaries that should be extended
     if boundaryIds:
-      flowExtensionFilter.SetBoundaryIds(boundaryIds)
+      boundaryIdsList = vtk.vtkIdList()
+      for i in boundaryIds:
+        boundaryIdsList.InsertNextId(i)
+      flowExtensionsFilter.SetBoundaryIds(boundaryIdsList)
     flowExtensionsFilter.Update()
     
     return flowExtensionsFilter.GetOutput()

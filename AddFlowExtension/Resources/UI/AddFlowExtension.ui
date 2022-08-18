@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>291</width>
-    <height>325</height>
+    <height>433</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
@@ -118,18 +118,21 @@
      <property name="collapsed">
       <bool>false</bool>
      </property>
-     <layout class="QFormLayout" name="formLayout_3">
+     <layout class="QFormLayout" name="formLayout">
       <item row="0" column="0">
        <widget class="QLabel" name="label_4">
         <property name="text">
-         <string>Invert threshold: </string>
+         <string>Select open boundaries:</string>
         </property>
        </widget>
       </item>
       <item row="0" column="1">
-       <widget class="QCheckBox" name="invertOutputCheckBox">
+       <widget class="QCheckBox" name="selectOpenBoundariesCheckBox">
+        <property name="enabled">
+         <bool>true</bool>
+        </property>
         <property name="toolTip">
-         <string>If checked, values above threshold are set to 0. If unchecked, values below are set to 0.</string>
+         <string>If checked, add flow extensions to selected open boundaries. If unchecked, add flow extensions to all available open boundaries</string>
         </property>
         <property name="text">
          <string/>
