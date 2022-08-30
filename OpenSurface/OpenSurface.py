@@ -10,7 +10,8 @@ import numpy as np
 
 #
 # OpenSurface
-#
+# TODO: Add mouse interaction for selection of the clipping ROI
+# TODO: clip centerlines to match opened model
 
 class OpenSurface(ScriptedLoadableModule):
   """Uses ScriptedLoadableModule base class, available at:
@@ -198,7 +199,9 @@ class OpenSurfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.planeLocationWidget.maximum = npoints-1
         #enable slider
         self.ui.planeLocationWidget.enabled = True 
-        
+        # call setcurrentplaneidx once to display ROI box in GUI
+        val=self._parameterNode.GetParameter("SlicePlaneLocation")
+        self.setCurrentPlaneIndex(val)
         
     else:
       #disable slider
@@ -389,7 +392,7 @@ class OpenSurfaceLogic(ScriptedLoadableModuleLogic):
     :param centerlinePolyData: Centerline model of vessel
     """
     from vtk.numpy_interface import dataset_adapter as dsa
-    
+    # TODO: replace this with slicer util methods
     pointdata = dsa.WrapDataObject(centerlinePolyData).PointData
     normaldata = pointdata['FrenetNormal']
     tangentdata = pointdata['FrenetTangent']
