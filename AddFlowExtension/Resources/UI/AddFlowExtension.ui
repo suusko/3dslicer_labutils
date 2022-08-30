@@ -96,6 +96,9 @@
         <property name="showChildNodeTypes">
          <bool>false</bool>
         </property>
+        <property name="baseName">
+         <string>extended_model</string>
+        </property>
         <property name="noneEnabled">
          <bool>true</bool>
         </property>

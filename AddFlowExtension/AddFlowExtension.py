@@ -11,7 +11,9 @@ from slicer.util import VTKObservationMixin
 
 #
 # AddFlowExtension
-#
+# TODO: when user deletes markupsfiducialnode openboundaryIds, when the module is reopened a new row is added with checkboxes even when the checkboxes are already present.
+# TODO: when the user leaves the module, clean up nodes that are only relevant to this module e.g. the openBoundaryIds node?
+# rename output model Model to e.g. ExtendedModel or ExtendedCappedModel
 
 class AddFlowExtension(ScriptedLoadableModule):
   """Uses ScriptedLoadableModule base class, available at:
@@ -270,6 +272,7 @@ class AddFlowExtensionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       openBoundariesIdsMarkupsNode = self._parameterNode.GetNodeReference("OpenBoundariesIds")
       if not openBoundariesIdsMarkupsNode:
         openBoundariesIdsMarkupsNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode","OpenBoundariesIds")
+       
         if openBoundariesIdsMarkupsNode:
           self._parameterNode.SetNodeReferenceID("OpenBoundariesIds",openBoundariesIdsMarkupsNode.GetID())
       else:
