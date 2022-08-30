@@ -289,7 +289,13 @@ class OpenSurfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       roiNode = self._parameterNode.GetNodeReference("OpenSurface_ROIBox")
       outputNode = self._parameterNode.GetNodeReference("OutputSurface")      
       self.logic.clipROIFromModel(modelNode,roiNode,outputNode)
-     
+      # display outputnode and hide inputnode
+      #if modelNode is not outputNode:
+      #  print("hide inputnode")
+      #  modelNode.SetDisplayVisibility(0)
+      outputNode.SetDisplayVisibility(1)
+      outputNode.GetDisplayNode().SetOpacity(1)
+      outputNode.GetDisplayNode().SetColor(0.5,0.9,0.88)
 #
 # OpenSurfaceLogic
 #
