@@ -218,6 +218,7 @@ class AddFlowExtensionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self._parameterNode.SetNodeReferenceID("OutputSurface", self.ui.outputSurfaceSelector.currentNodeID)
     self._parameterNode.SetParameter("ExtensionLength",str(self.ui.extensionLengthSpinBox.value))
     self._parameterNode.SetParameter("AddCaps", "true" if self.ui.addCapsCheckBox.checked else "false")
+    self._parameterNode.SetParameter("SelectOpenBoundaries", "true" if self.ui.selectOpenBoundariesCheckBox.checked else "false")
     self._parameterNode.EndModify(wasModified)
     
   def onApplyButton(self):
@@ -246,14 +247,28 @@ class AddFlowExtensionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       
       
     
-    addCaps = (self._parameterNode.GetParameter("AddCaps") == "true")
-    if addCaps:
-      outputSurfacePolyData = self.logic.addCaps(outputSurfacePolyData)
+      addCaps = (self._parameterNode.GetParameter("AddCaps") == "true")
+      if addCaps:
+        outputSurfacePolyData = self.logic.addCaps(outputSurfacePolyData)
       
-    outputSurfaceNode = self._parameterNode.GetNodeReference("OutputSurface")
-    if outputSurfaceNode:
-      outputSurfaceNode.SetAndObserveMesh(outputSurfacePolyData)  
-
+      outputSurfaceNode = self._parameterNode.GetNodeReference("OutputSurface")
+      if outputSurfaceNode:
+        # add polydata to output node
+        print("addpolydata to output node")
+        outputSurfaceNode.SetAndObserveMesh(outputSurfacePolyData)
+        if not outputSurfaceNode.GetDisplayNode():
+          outputSurfaceNode.CreateDefaultDisplayNodes()
+        outputSurfaceNode.GetDisplayNode().SetVisibility(1)
+        outputSurfaceNode.GetDisplayNode().SetOpacity(1)
+        outputSurfaceNode.GetDisplayNode().SetColor(0.90,0.34,0.69)
+    
+      # hide input surface
+      inputSurfaceNode = self._parameterNode.GetNodeReference("InputSurface")
+      if inputSurfaceNode:
+        if not inputSurfaceNode.GetDisplayNode():
+          inputSurfaceNode.CreateDefaultDisplayNodes()
+        inputSurfaceNode.GetDisplayNode().SetVisibility(0)
+        
   # this function is called when checkbox "select open boundaries"  changes state
   def onSelectOpenBoundariesStateChanged(self):
     
@@ -280,7 +295,7 @@ class AddFlowExtensionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # empty the node
         openBoundariesIdsMarkupsNode.RemoveAllMarkups()
         
-      # add markups corresonding to the barycenters of the open boundaries with the boundary id as label
+      # add markups corresponding to the barycenters of the open boundaries with the boundary id as label
       openbounds_ids = []
       for i in range(barycenterPolyData.GetNumberOfPoints()):
         point = barycenterPolyData.GetPoint(i)
@@ -299,14 +314,24 @@ class AddFlowExtensionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         hlayout.addWidget(newCheckBox) # add checkbox widget to layout
         
       # add layout with checkboxes to parent layout       
-      self.ui.formLayout.addRow("id:",hlayout)
+      self.ui.formLayout.insertRow(4,"id:",hlayout)
+      print("add node")
+      print(self.ui.formLayout.rowCount())
+      
+      # decrease opacity of input model to make the open boundary ids visible
+      inputSurfaceNode = self._parameterNode.GetNodeReference("InputSurface")
+      if inputSurfaceNode:
+        if not inputSurfaceNode.GetDisplayNode():
+          inputSurfaceNode.CreateDefaultDisplayNodes()
+        inputSurfaceNode.GetDisplayNode().SetOpacity(0.5)
+      
     else:
       # remove the open boundaries markupsnode and related variables, if it exists
       openBoundariesIdsMarkupsNode = self._parameterNode.GetNodeReference("OpenBoundariesIds")
       if openBoundariesIdsMarkupsNode:
         self.openBoundariesCheckBoxDict={}
-        idx = self.ui.formLayout.rowCount()
-        self.ui.formLayout.removeRow(idx-1)
+        print("remove node")
+        self.ui.formLayout.removeRow(4)
         slicer.mrmlScene.RemoveNode(openBoundariesIdsMarkupsNode)
       
     
@@ -337,7 +362,7 @@ class AddFlowExtensionLogic(ScriptedLoadableModuleLogic):
     if not parameterNode.GetParameter("ExtensionLength"):
       parameterNode.SetParameter("ExtensionLength","5.0")
     if not parameterNode.GetParameter("SelectOpenBoundaries"):
-      parameterNode.SetParameter("SelectOpenBoundaries", "true")
+      parameterNode.SetParameter("SelectOpenBoundaries", "false")
     if not parameterNode.GetParameter("AddCaps"):
       parameterNode.SetParameter("AddCaps", "false")
     return
