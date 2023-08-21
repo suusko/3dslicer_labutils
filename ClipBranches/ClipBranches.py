@@ -209,10 +209,10 @@ class ClipBranchesWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         nrows = math.ceil(len(branchids)/ncols)
         self.branchIdCheckBoxDict={}
         
-        for i in branchids:
+        for (i,id) in enumerate(branchids):
           newCheckBox =ctk.ctkCheckBox()
-          newCheckBox.text=str(branchids[i])
-          self.branchIdCheckBoxDict[branchids[i]] = newCheckBox
+          newCheckBox.text=str(id)
+          self.branchIdCheckBoxDict[id] = newCheckBox
           row = i//ncols+1
           col = i%ncols 
           self.ui.gridLayout.addWidget(newCheckBox,row,col)
