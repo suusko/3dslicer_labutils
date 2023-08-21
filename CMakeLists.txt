@@ -22,6 +22,7 @@ include(${Slicer_USE_FILE})
 add_subdirectory(ClipBranches)
 add_subdirectory(OpenSurface)
 add_subdirectory(AddFlowExtension)
+add_subdirectory(PrepareModelForCFD)
 ## NEXT_MODULE
 
 #-----------------------------------------------------------------------------
