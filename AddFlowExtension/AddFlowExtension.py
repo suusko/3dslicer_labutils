@@ -23,7 +23,7 @@ class AddFlowExtension(ScriptedLoadableModule):
   def __init__(self, parent):
     ScriptedLoadableModule.__init__(self, parent)
     self.parent.title = "AddFlowExtension"  # TODO: make this more human readable by adding spaces
-    self.parent.categories = ["Examples"]  # TODO: set categories (folders where the module shows up in the module selector)
+    self.parent.categories = ["LabUtils"]  # TODO: set categories (folders where the module shows up in the module selector)
     self.parent.dependencies = []  # TODO: add here list of module names that this module requires
     self.parent.contributors = ["Suze-Anne Korteland (Erasmus MC)"]  # TODO: replace with "Firstname Lastname (Organization)"
     # TODO: update with short description of the module and a link to online module documentation
@@ -426,7 +426,7 @@ class AddFlowExtensionLogic(ScriptedLoadableModuleLogic):
       flowExtensionsFilter.SetExtensionRatio(extensionLength) # proportionality factor, how much is the extension length extended 
     flowExtensionsFilter.SetExtensionRadius(1) # float, ?
     flowExtensionsFilter.SetTransitionRatio(0.25) # default value, ratio with which the extension changes to circular boundary
-    flowExtensionsFilter.SetCenterlineNormalEstimationDistanceRatio(1.0) #default value, controls how far into the centerline the algorithm looks for computing the orientation of the flow extension.
+    flowExtensionsFilter.SetCenterlineNormalEstimationDistanceRatio(0.0) #default value, controls how far into the centerline the algorithm looks for computing the orientation of the flow extension.
     #flowExtensionsFilter.SetNumberOfBoundaryPoints(self.TargetNumberOfBoundaryPoints)
     # use centerline for extension direction
     flowExtensionsFilter.SetExtensionModeToUseCenterlineDirection()
