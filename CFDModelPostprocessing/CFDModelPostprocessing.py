@@ -2,7 +2,7 @@ import logging
 import os
 
 import vtk
-
+import qt
 import slicer
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
@@ -88,7 +88,9 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.ui.scaleFactorLineEdit.connect('textEdited(str)', self.updateParameterNodeFromGUI)
         self.ui.scaleFactorCheckBox.connect("toggled(bool)", self.updateParameterNodeFromGUI)
         self.ui.lpsToRasCheckBox.connect("toggled(bool)", self.updateParameterNodeFromGUI)
-        
+        self.ui.endPointsMarkupsSelector.connect("currentNodeChanged(vtkMLMLNode*)", self.updateParameterNodeFromGUI)
+        self.ui.autoDetectEndPointsPushButton.connect('clicked(bool)',self.onAutoDetectEndPointsButton)
+
         # set layout to 3D view only
         layoutManager = slicer.app.layoutManager()
         layoutManager.setLayout(slicer.vtkMRMLLayoutNode.SlicerLayoutOneUp3DView)
@@ -174,8 +176,10 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         # Make sure GUI changes do not call updateParameterNodeFromGUI (it could cause infinite loop)
         self._updatingGUIFromParameterNode = True
 
-        # Update node selectors and sliders
-      
+        # Update node selectors and slider
+        self.ui.endPointsMarkupsSelector.setCurrentNode(self._parameterNode.GetNodeReference("EndPoints"))
+
+
         # Update buttons states and tooltips
         self.ui.scaleFactorCheckBox.checked = (self._parameterNode.GetParameter("UseScaleFactor") == "true")
         self.ui.scaleFactorLineEdit.enabled = (self._parameterNode.GetParameter("UseScaleFactor") == "true")
@@ -196,6 +200,8 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
         if self._parameterNode is None or self._updatingGUIFromParameterNode:
             return
+
+        self._parameterNode.SetNodeReferenceID("EndPoints", self.ui.endPointsMarkupsSelector.currentNodeID)
 
         wasModified = self._parameterNode.StartModify()  # Modify all properties in a single batch
         
@@ -285,6 +291,72 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
             viewNode.SetAxisLabelsVisible(0)
             # display orientation marker
             viewNode.SetOrientationMarkerType(slicer.vtkMRMLAbstractViewNode.OrientationMarkerTypeHuman)
+
+            # save to parameter node
+            self._parameterNode.SetNodeReferenceID("SurfaceModel",surfaceNode.GetID())
+        
+    def getPreprocessedPolyData(self, surfaceModelNode):
+        """ Preprocess the surface polydata for centerline computation. Code based on ExtractCenterlineWidget and 
+        ExtractCenterlineLogic"""
+        extractCenterlineLogic = slicer.modules.extractcenterline.widgetRepresentation().self().logic
+        
+        targetNumberOfPoints = 5000 # default
+        decimationAggressiveness = 4.0 # default
+        subdivideInputSurface = False # default
+        preprocessedPolyData = extractCenterlineLogic.preprocess(surfaceModelNode.GetPolyData(), targetNumberOfPoints, decimationAggressiveness, subdivideInputSurface)
+        
+        return preprocessedPolyData
+    
+    def onAutoDetectEndPointsButton(self):
+        surfaceModelNode = self._parameterNode.GetNodeReference("SurfaceModel")
+        endPointsNode = self._parameterNode.GetNodeReference("EndPoints")
+        if not endPointsNode:
+            endPointsNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode",
+                    "CenterlineEndPoints")
+            endPointsNode.CreateDefaultDisplayNodes()
+            self._parameterNode.SetNodeReferenceID("EndPoints", endPointsNode.GetID())
+            # Make input surface semi-transparent to make all detected endpoints visible
+            surfaceModelNode.GetDisplayNode().SetOpacity(0.8)
+        
+        self.autoDetectEndPoints(surfaceModelNode,endPointsNode)
+
+
+    def autoDetectEndPoints(self, surfaceModelNode, endPointsNode):
+        """
+        Automatically detect mesh endpoints, code based on ExtractCenterlineWidget and ExtractCenterlineLogic
+        """
+        extractCenterlineLogic = slicer.modules.extractcenterline.widgetRepresentation().self().logic
+
+        qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
+        try:
+            slicer.util.showStatusMessage("Preprocessing...")
+            slicer.app.processEvents()  # force update
+            preprocessedPolyData = self.getPreprocessedPolyData(surfaceModelNode)
+            endPointsNode.RemoveAllControlPoints()
+        
+            slicer.util.showStatusMessage("Extract network...")
+            slicer.app.processEvents()  # force update
+            networkPolyData = extractCenterlineLogic.extractNetwork(preprocessedPolyData, endPointsNode)
+
+            endpointPositions = extractCenterlineLogic.getEndPoints(networkPolyData, startPointPosition=None)
+
+            endPointsNode.GetDisplayNode().PointLabelsVisibilityOff()
+            for position in endpointPositions:
+                endPointsNode.AddControlPoint(vtk.vtkVector3d(position))
+
+            # Mark the first node as unselected, which means that it is the start point
+            # (by default points are selected and there are more endpoints and only one start point,
+            # therefore indicating start point by non-selected stat requires less clicking)
+            if endPointsNode.GetNumberOfControlPoints() > 0:
+                endPointsNode.SetNthControlPointSelected(0, False)
+
+        except Exception as e:
+          slicer.util.errorDisplay("Failed to detect end points: "+str(e))
+          import traceback
+          traceback.print_exc()
+        qt.QApplication.restoreOverrideCursor()
+
+        slicer.util.showStatusMessage("Automatic endpoint computation complete.", 3000)
     
 #
 # CFDModelPostprocessingLogic
