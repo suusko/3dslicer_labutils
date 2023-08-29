@@ -90,7 +90,7 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.ui.lpsToRasCheckBox.connect("toggled(bool)", self.updateParameterNodeFromGUI)
         self.ui.endPointsMarkupsSelector.connect("currentNodeChanged(vtkMLMLNode*)", self.updateParameterNodeFromGUI)
         self.ui.autoDetectEndPointsPushButton.connect('clicked(bool)',self.onAutoDetectEndPointsButton)
-
+        self.ui.computeCenterlineButton.connect('clicked(bool)', self.onComputeCenterlineButton)
         # set layout to 3D view only
         layoutManager = slicer.app.layoutManager()
         layoutManager.setLayout(slicer.vtkMRMLLayoutNode.SlicerLayoutOneUp3DView)
@@ -320,6 +320,48 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         
         self.autoDetectEndPoints(surfaceModelNode,endPointsNode)
 
+        # display endpoint labels
+        endPointsNode.SetControlPointLabelFormat("%d")
+        # update control points with current format
+        slicer.modules.markups.logic().RenameAllControlPointsFromCurrentFormat(endPointsNode)
+        endPointsNode.GetDisplayNode().SetPointLabelsVisibility(True)
+
+        # create radiobuttons so the user can select which endPoint should be the inlet
+        layout = qt.QHBoxLayout()
+        self.inletRadioButtonsList=[]
+        unselectedPointIndex = None
+        for i in range(endPointsNode.GetNumberOfControlPoints()):
+            newRadioButton = qt.QRadioButton()
+            newRadioButton.text=endPointsNode.GetNthControlPointLabel(i)
+            self.inletRadioButtonsList.append(newRadioButton)
+           
+
+            # check the radiobutton if its corresponding control point is unchecked to indicate the startpoint for centerline computation
+            if not endPointsNode.GetNthControlPointSelected(i):
+                newRadioButton.checked = True
+
+             #connect event handler when the button is toggled
+            newRadioButton.toggled.connect(self.onInletRadioButtonToggled)
+            layout.addWidget(newRadioButton) # add checkbox widget to layout
+
+        self.ui.selectInletGroupBox.setLayout(layout)
+        self.ui.selectInletGroupBox.enabled = True
+
+        
+      
+    def onInletRadioButtonToggled(self,checked):
+        if not checked:
+            return
+        else:
+            endPointsNode = self._parameterNode.GetNodeReference("EndPoints")
+            # select all controlpoints, then deselect the one that was marked as inlet
+            slicer.modules.markups.logic().SetAllControlPointsSelected(endPointsNode,True)
+            
+            # get the markupsnode controlpoint associated with the selected radio button and unselect it
+            for (i,btn) in enumerate(self.inletRadioButtonsList):
+                if btn.isChecked():
+                     endPointsNode.SetNthControlPointSelected(i,False)    
+
 
     def autoDetectEndPoints(self, surfaceModelNode, endPointsNode):
         """
@@ -358,6 +400,33 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
         slicer.util.showStatusMessage("Automatic endpoint computation complete.", 3000)
     
+    def onComputeCenterlineButton(self):
+        # compute centerline and its attributes and metrics for next postprocessing step
+        surfaceNode = self._parameterNode.GetNodeReference("SurfaceModel")
+        endPointsNode = self._parameterNode.GetNodeReference("EndPoints")
+
+        # compute centerline
+        ExtractCenterlineLogic = slicer.modules.extractcenterline.widgetRepresentation().self().logic
+        ClipBranchesLogic = slicer.modules.clipbranches.widgetRepresentation().self().logic
+
+        # preprocess polydata to improve centerline computation
+        preprocessedPolyData = self.getPreprocessedPolyData(surfaceNode)
+        curveSamplingDistance = 1.0 # default
+        centerlinePolyData, _ = ExtractCenterlineLogic.extractCenterline(preprocessedPolyData,endPointsNode,curveSamplingDistance)
+        
+        # split centerlines into branches
+        centerlinePolyData = ClipBranchesLogic.computeCenterlineBranches(centerlinePolyData)
+        
+        # to node
+        centerlineModelNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode",'CenterlineModel')
+        centerlineModelNode.SetAndObserveMesh(centerlinePolyData)
+        if not centerlineModelNode.GetDisplayNode():
+            centerlineModelNode.CreateDefaultDisplayNodes()  
+        centerlineModelNode.GetDisplayNode().SetVisibility(1) 
+        centerlineModelNode.GetDisplayNode().SetLineWidth(5)
+        # reduce opacity of surface model
+        surfaceNode.GetDisplayNode().SetOpacity(0.4)
+
 #
 # CFDModelPostprocessingLogic
 #
