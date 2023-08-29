@@ -327,15 +327,36 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         endPointsNode.GetDisplayNode().SetPointLabelsVisibility(True)
 
         # create radiobuttons so the user can select which endPoint should be the inlet
-        layout = qt.QHBoxLayout()
+        self.updateInletRadioButtons(endPointsNode)
+
+        # when user removes or adds point to the endpointsNode, recreate the inlet radiobuttons
+        endPointsNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointAddedEvent,self.updateInletRadioButtons)
+        endPointsNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointRemovedEvent,self.updateInletRadioButtons)
+
+        # enable inlet radiobuttons groupbox
+        self.ui.selectInletGroupBox.enabled = True
+
+    def updateInletRadioButtons(self,caller,event=None):
+        endPointsNode = caller
+        # clear existing widgets in the layout
+        layout = self.ui.selectInletGroupBox.layout()
+        if layout is not None:
+            # remove all children
+            while layout.count():
+                item=layout.takeAt(0)
+                widget = item.widget()
+                if widget is not None:
+                    widget.deleteLater()
+        else:
+            #create layout
+            layout = qt.QHBoxLayout()
+            self.ui.selectInletGroupBox.setLayout(layout)
+        
         self.inletRadioButtonsList=[]
-        unselectedPointIndex = None
         for i in range(endPointsNode.GetNumberOfControlPoints()):
             newRadioButton = qt.QRadioButton()
             newRadioButton.text=endPointsNode.GetNthControlPointLabel(i)
             self.inletRadioButtonsList.append(newRadioButton)
-           
-
             # check the radiobutton if its corresponding control point is unchecked to indicate the startpoint for centerline computation
             if not endPointsNode.GetNthControlPointSelected(i):
                 newRadioButton.checked = True
@@ -344,10 +365,10 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
             newRadioButton.toggled.connect(self.onInletRadioButtonToggled)
             layout.addWidget(newRadioButton) # add checkbox widget to layout
 
-        self.ui.selectInletGroupBox.setLayout(layout)
-        self.ui.selectInletGroupBox.enabled = True
-
         
+      
+        # create the radiobuttons
+
       
     def onInletRadioButtonToggled(self,checked):
         if not checked:
