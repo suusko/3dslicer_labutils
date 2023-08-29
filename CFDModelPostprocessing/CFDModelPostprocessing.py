@@ -290,7 +290,7 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
             viewNode.SetBoxVisible(0)
             viewNode.SetAxisLabelsVisible(0)
             # display orientation marker
-            viewNode.SetOrientationMarkerType(slicer.vtkMRMLAbstractViewNode.OrientationMarkerTypeHuman)
+            viewNode.SetOrientationMarkerType(slicer.vtkMRMLAbstractViewNode.OrientationMarkerTypeCube)
 
             # save to parameter node
             self._parameterNode.SetNodeReferenceID("SurfaceModel",surfaceNode.GetID())
