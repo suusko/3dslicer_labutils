@@ -292,5 +292,21 @@
     </hint>
    </hints>
   </connection>
+  <connection>
+   <sender>CFDModelPostprocessing</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>surfaceVariablesDisplayWidget</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>281</x>
+     <y>286</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>281</x>
+     <y>313</y>
+    </hint>
+   </hints>
+  </connection>
  </connections>
 </ui>
