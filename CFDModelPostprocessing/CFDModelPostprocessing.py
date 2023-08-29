@@ -456,7 +456,7 @@ class CFDModelPostprocessingLogic(ScriptedLoadableModuleLogic):
         if not parameterNode.GetParameter("UseScaleFactor"):
             parameterNode.SetParameter("UseScaleFactor","false")
         if not parameterNode.GetParameter("LPSToRAS"):
-            parameterNode.SetParameter("LPSToRAS","true")
+            parameterNode.SetParameter("LPSToRAS","false")
             
    
 
