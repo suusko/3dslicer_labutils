@@ -114,6 +114,10 @@ class OpenSurfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     # Make sure parameter node exists and observed
     self.initializeParameterNode()
+    # shows the ROI box if present
+    ROIBoxNode = self._parameterNode.GetNodeReference("OpenSurface_ROIBox")
+    if ROIBoxNode:
+      ROIBoxNode.SetDisplayVisibility(1)
 
   def exit(self):
     """
@@ -121,6 +125,10 @@ class OpenSurfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     # Do not react to parameter node changes (GUI wlil be updated when the user enters into the module)
     self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromParameterNode)
+    # hide the ROI box if present
+    ROIBoxNode = self._parameterNode.GetNodeReference("OpenSurface_ROIBox")
+    if ROIBoxNode:
+      ROIBoxNode.SetDisplayVisibility(0)
 
   def onSceneStartClose(self, caller, event):
     """
