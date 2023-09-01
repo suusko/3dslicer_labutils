@@ -12,10 +12,39 @@
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
-    <widget class="QPushButton" name="loadButton">
+    <widget class="ctkCollapsibleButton" name="CollapsibleButton">
      <property name="text">
       <string>1. Load Model</string>
      </property>
+     <layout class="QFormLayout" name="formLayout">
+      <item row="0" column="0" colspan="2">
+       <widget class="ctkPathLineEdit" name="filePathLineEdit">
+        <property name="filters">
+         <set>ctkPathLineEdit::Executable|ctkPathLineEdit::Files|ctkPathLineEdit::NoDot|ctkPathLineEdit::NoDotDot|ctkPathLineEdit::Readable</set>
+        </property>
+        <property name="nameFilters">
+         <stringlist>
+          <string>*.stl</string>
+          <string>*.vtk</string>
+          <string>*.vtp</string>
+          <string>*.obj</string>
+          <string>*.ply</string>
+          <string>*.vtu</string>
+         </stringlist>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QPushButton" name="loadButton">
+        <property name="focusPolicy">
+         <enum>Qt::NoFocus</enum>
+        </property>
+        <property name="text">
+         <string>Load</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
     </widget>
    </item>
    <item alignment="Qt::AlignHCenter">
@@ -145,6 +174,17 @@
   </layout>
  </widget>
  <customwidgets>
+  <customwidget>
+   <class>ctkCollapsibleButton</class>
+   <extends>QWidget</extends>
+   <header>ctkCollapsibleButton.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>ctkPathLineEdit</class>
+   <extends>QWidget</extends>
+   <header>ctkPathLineEdit.h</header>
+  </customwidget>
   <customwidget>
    <class>qMRMLWidget</class>
    <extends>QWidget</extends>

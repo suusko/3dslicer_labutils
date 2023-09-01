@@ -201,9 +201,29 @@ class PrepareModelForCFDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
   def onLoadButton(self):
     """ load model """
     print("load model")   
-    # open the add data module
-    slicer.util.openAddModelDialog()
-  
+    with slicer.util.tryWithErrorDisplay("Failed to load file", waitCursor=True):
+
+      filePath = self.ui.filePathLineEdit.currentPath
+      # try loading file using slicer data loader
+      surfaceNode = slicer.util.loadModel(filePath) 
+
+      # set visibility
+      surfaceNode.GetDisplayNode().SetVisibility(1) 
+      
+      # Center view
+      threeDView=slicer.app.layoutManager().threeDWidget(0).threeDView()
+      # center 3Dview on the scene
+      threeDView.resetFocalPoint()
+      # hide bounding box
+      viewNode = slicer.app.layoutManager().threeDWidget(0).mrmlViewNode()
+      viewNode.SetBoxVisible(0)
+      viewNode.SetAxisLabelsVisible(0)
+      # display orientation marker
+      viewNode.SetOrientationMarkerType(slicer.vtkMRMLAbstractViewNode.OrientationMarkerTypeCube)
+
+      # save to parameter node
+      self._parameterNode.SetNodeReferenceID("SurfaceModel",surfaceNode.GetID())
+
   def onComputeCenterlineButton(self):
     """ compute centerline """
     # switch to extract centerline module to compute the centerline
