@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>291</width>
+    <width>451</width>
     <height>528</height>
    </rect>
   </property>
@@ -67,10 +67,60 @@
     </widget>
    </item>
    <item>
-    <widget class="QPushButton" name="computeCenterlineButton">
+    <widget class="ctkCollapsibleButton" name="CollapsibleButton_2">
      <property name="text">
       <string>2. Compute Centerline</string>
      </property>
+     <layout class="QFormLayout" name="formLayout_2">
+      <item row="0" column="0">
+       <widget class="QLabel" name="label">
+        <property name="text">
+         <string>EndPoints</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <layout class="QHBoxLayout" name="horizontalLayout">
+        <item>
+         <widget class="qMRMLNodeComboBox" name="endPointMarkupsSelector">
+          <property name="nodeTypes">
+           <stringlist notr="true"/>
+          </property>
+          <property name="hideChildNodeTypes">
+           <stringlist notr="true"/>
+          </property>
+          <property name="interactionNodeSingletonTag">
+           <string notr="true"/>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="qSlicerMarkupsPlaceWidget" name="endPointsMarkupsPlaceWidget"/>
+        </item>
+        <item>
+         <widget class="ctkPushButton" name="autoDetectEndPointsPushButton">
+          <property name="text">
+           <string>Auto-detect</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item row="2" column="1">
+       <widget class="QPushButton" name="computeCenterlineButton">
+        <property name="text">
+         <string>Compute</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="0" colspan="2">
+       <widget class="QGroupBox" name="selectInletGroupBox">
+        <property name="title">
+         <string>Select inlet</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
     </widget>
    </item>
    <item alignment="Qt::AlignHCenter">
@@ -186,10 +236,31 @@
    <header>ctkPathLineEdit.h</header>
   </customwidget>
   <customwidget>
+   <class>ctkPushButton</class>
+   <extends>QPushButton</extends>
+   <header>ctkPushButton.h</header>
+  </customwidget>
+  <customwidget>
+   <class>qMRMLNodeComboBox</class>
+   <extends>QWidget</extends>
+   <header>qMRMLNodeComboBox.h</header>
+  </customwidget>
+  <customwidget>
    <class>qMRMLWidget</class>
    <extends>QWidget</extends>
    <header>qMRMLWidget.h</header>
    <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>qSlicerWidget</class>
+   <extends>QWidget</extends>
+   <header>qSlicerWidget.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>qSlicerMarkupsPlaceWidget</class>
+   <extends>qSlicerWidget</extends>
+   <header>qSlicerMarkupsPlaceWidget.h</header>
   </customwidget>
   <customwidget>
    <class>qMRMLSubjectHierarchyTreeView</class>
@@ -198,5 +269,54 @@
   </customwidget>
  </customwidgets>
  <resources/>
- <connections/>
+ <connections>
+  <connection>
+   <sender>PrepareModelForCFD</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>endPointMarkupsSelector</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>195</x>
+     <y>263</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>79</x>
+     <y>182</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>PrepareModelForCFD</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>endPointsMarkupsPlaceWidget</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>195</x>
+     <y>263</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>205</x>
+     <y>182</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>endPointMarkupsSelector</sender>
+   <signal>currentNodeChanged(vtkMRMLNode*)</signal>
+   <receiver>endPointsMarkupsPlaceWidget</receiver>
+   <slot>setCurrentNode(vtkMRMLNode*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>79</x>
+     <y>182</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>205</x>
+     <y>182</y>
+    </hint>
+   </hints>
+  </connection>
+ </connections>
 </ui>
