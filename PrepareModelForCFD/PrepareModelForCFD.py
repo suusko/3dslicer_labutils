@@ -391,9 +391,13 @@ class PrepareModelForCFDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
     self.ui.openModelCollapsibleButton.collapsed = False
     self.ui.computeCenterlineCollapsibleButton.collapsed = True
 
-    
+    # hide the inlet points
+    endPointsNode.GetDisplayNode().SetVisibility(0)
+
   def onOpenModelButton(self):
     """" open surface """
+
+    
     # switch to open surface module to open the model
     slicer.util.selectModule("OpenSurface")
     
