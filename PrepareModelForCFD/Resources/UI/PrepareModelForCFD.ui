@@ -130,14 +130,14 @@
     </widget>
    </item>
    <item>
-    <widget class="ctkCollapsibleButton" name="CollapsibleButton">
+    <widget class="ctkCollapsibleButton" name="addFlowExtensionsCollapsibleButton">
      <property name="text">
       <string>4. Add Flow Extensions</string>
      </property>
      <property name="collapsed">
       <bool>true</bool>
      </property>
-     <layout class="QVBoxLayout" name="verticalLayout_3">
+     <layout class="QHBoxLayout" name="horizontalLayout_2">
       <item>
        <widget class="QPushButton" name="addFlowExtensionsButton">
         <property name="text">
@@ -149,16 +149,28 @@
     </widget>
    </item>
    <item>
-    <widget class="QPushButton" name="exportModelButton">
-     <property name="enabled">
+    <widget class="ctkCollapsibleButton" name="saveModelsCollapsibleButton">
+     <property name="text">
+      <string>5. Save model</string>
+     </property>
+     <property name="collapsed">
       <bool>true</bool>
      </property>
-     <property name="toolTip">
-      <string>Run the algorithm.</string>
-     </property>
-     <property name="text">
-      <string> Export Model</string>
-     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_3">
+      <item>
+       <widget class="QPushButton" name="exportModelButton">
+        <property name="enabled">
+         <bool>true</bool>
+        </property>
+        <property name="toolTip">
+         <string>Run the algorithm.</string>
+        </property>
+        <property name="text">
+         <string>Save model(s)</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
     </widget>
    </item>
    <item>
