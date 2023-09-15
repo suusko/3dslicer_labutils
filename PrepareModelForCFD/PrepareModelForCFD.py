@@ -234,6 +234,10 @@ class PrepareModelForCFDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
 
       # save to parameter node
       self._parameterNode.SetNodeReferenceID("SurfaceModel",surfaceNode.GetID())
+
+      # open the next step
+      self.ui.computeCenterlineCollapsibleButton.collapsed = False
+      self.ui.loadCollapsibleButton.collapsed = True
  
   def getPreprocessedPolyData(self, surfaceModelNode):
     """ Preprocess the surface polydata for centerline computation. Code based on ExtractCenterlineWidget and
@@ -382,6 +386,10 @@ class PrepareModelForCFDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
     centerlineModelNode.GetDisplayNode().SetLineWidth(5)
     # reduce opacity of surface model
     surfaceNode.GetDisplayNode().SetOpacity(0.4)
+
+    # Open the next step
+    self.ui.openModelCollapsibleButton.collapsed = False
+    self.ui.computeCenterlineCollapsibleButton.collapsed = True
 
     
   def onOpenModelButton(self):
