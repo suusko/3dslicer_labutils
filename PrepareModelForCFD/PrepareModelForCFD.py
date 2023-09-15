@@ -97,14 +97,6 @@ class PrepareModelForCFDWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
     # Make sure parameter node is initialized (needed for module reload)
     self.initializeParameterNode()
 
-    self.isSingleModuleShown = False
-    slicer.util.mainWindow().setWindowTitle("Prepare Model for CFD")
-    self.showSingleModule(True)
-    shortcut = qt.QShortcut(slicer.util.mainWindow())
-    shortcut.setKey(qt.QKeySequence("Ctrl+Shift+b"))
-    shortcut.connect('activated()', lambda: self.showSingleModule(toggle=True))
-
-
    
 
   def cleanup(self):
