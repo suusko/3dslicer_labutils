@@ -267,7 +267,8 @@ class AddFlowExtensionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       if inputSurfaceNode:
         if not inputSurfaceNode.GetDisplayNode():
           inputSurfaceNode.CreateDefaultDisplayNodes()
-        inputSurfaceNode.GetDisplayNode().SetVisibility(0)
+        if inputSurfaceNode != outputSurfaceNode:  
+          inputSurfaceNode.GetDisplayNode().SetVisibility(0)
         
   # this function is called when checkbox "select open boundaries"  changes state
   def onSelectOpenBoundariesStateChanged(self):
