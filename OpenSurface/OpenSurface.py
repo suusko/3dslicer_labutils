@@ -118,6 +118,10 @@ class OpenSurfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     ROIBoxNode = self._parameterNode.GetNodeReference("OpenSurface_ROIBox")
     if ROIBoxNode:
       ROIBoxNode.SetDisplayVisibility(1)
+      # add observer to move the Roibox
+      crosshairNode=slicer.util.getNode("Crosshair")
+      self.ROIPlacementObservationId = crosshairNode.AddObserver(slicer.vtkMRMLCrosshairNode.CursorPositionModifiedEvent, self.onMouseMoved)
+   
 
   def exit(self):
     """
@@ -129,6 +133,9 @@ class OpenSurfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     ROIBoxNode = self._parameterNode.GetNodeReference("OpenSurface_ROIBox")
     if ROIBoxNode:
       ROIBoxNode.SetDisplayVisibility(0)
+      # remove observer
+      crosshairNode=slicer.util.getNode("Crosshair")
+      crosshairNode.RemoveObserver(self.ROIPlacementObservationId)
 
   def onSceneStartClose(self, caller, event):
     """
@@ -283,7 +290,7 @@ class OpenSurfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
       # setup crosshair to get positionon centerline model. Position can be selected by moving the mouse while holding the shift key. Code based on script repository
       crosshairNode=slicer.util.getNode("Crosshair")
-      observationId = crosshairNode.AddObserver(slicer.vtkMRMLCrosshairNode.CursorPositionModifiedEvent, self.onMouseMoved)
+      self.ROIPlacementObservationId = crosshairNode.AddObserver(slicer.vtkMRMLCrosshairNode.CursorPositionModifiedEvent, self.onMouseMoved)
    
     except Exception as e:
       slicer.util.errorDisplay("Failed create ROI Box. Please make sure a centerline model is selected. Error: "+str(e))
