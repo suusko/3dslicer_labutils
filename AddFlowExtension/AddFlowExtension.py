@@ -184,7 +184,13 @@ class AddFlowExtensionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.outputSurfaceSelector.setCurrentNode(self._parameterNode.GetNodeReference("OutputSurface"))
    
     # Update buttons states and tooltips
-    if self._parameterNode.GetNodeReference("InputSurface") and self._parameterNode.GetNodeReference("InputCenterline") and self._parameterNode.GetNodeReference("OutputSurface"):
+    if self._parameterNode.GetNodeReference("InputSurface") and self._parameterNode.GetNodeReference("InputCenterline"):
+      
+      if not self._parameterNode.GetNodeReference("OutputSurface"):
+        outputNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLModelNode', 'extended_model')
+        self._parameterNode.SetNodeReferenceID("OutputSurface",outputNode.GetID())
+        self.ui.outputSurfaceSelector.setCurrentNode(outputNode)
+      
       self.ui.applyButton.toolTip = "Add flow extensions"
       self.ui.applyButton.enabled = True
 
