@@ -14,7 +14,7 @@
    <item>
     <widget class="ctkCollapsibleButton" name="loadFileCollapsibleButton">
      <property name="text">
-      <string>Load File</string>
+      <string>1. Load File</string>
      </property>
      <layout class="QFormLayout" name="formLayout_2">
       <item row="1" column="0">
@@ -93,7 +93,7 @@
    <item>
     <widget class="qMRMLCollapsibleButton" name="MRMLCollapsibleButton">
      <property name="text">
-      <string>Dsiplay model surface</string>
+      <string>2. Display model surface</string>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_2">
       <item>
@@ -109,7 +109,7 @@
    <item>
     <widget class="ctkCollapsibleButton" name="computeCenterlinesCollapsibleButton">
      <property name="text">
-      <string>Compute centerline</string>
+      <string>3. Compute centerline</string>
      </property>
      <layout class="QFormLayout" name="formLayout">
       <item row="0" column="0">
@@ -172,6 +172,59 @@
          <string>Select inlet:</string>
         </property>
        </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="ctkCollapsibleButton" name="CollapsibleButton">
+     <property name="text">
+      <string>4. Remove flow extensions / clip to ROI</string>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_3">
+      <item>
+       <widget class="QLabel" name="label_3">
+        <property name="text">
+         <string>Move ROI box by moving mouse while holding down the SHIFT key in the 3D view. when ready to clip press Apply. Reset Clip resets the clipped model to the input model.</string>
+        </property>
+        <property name="wordWrap">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayout_2">
+        <item>
+         <widget class="QPushButton" name="applyClipButton">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="text">
+           <string>Apply</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="resetClipButton">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="text">
+           <string>Reset Clip</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="saveClippedModelButton">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="text">
+           <string>Save model</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
       </item>
      </layout>
     </widget>
