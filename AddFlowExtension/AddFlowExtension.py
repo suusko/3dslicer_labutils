@@ -1,6 +1,7 @@
 import logging
 import os
 import math
+import numpy as np
 import vtk
 import ctk
 import qt
@@ -86,9 +87,6 @@ class AddFlowExtensionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.inputSurfaceSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
     self.ui.inputCenterlineSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
     self.ui.outputSurfaceSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
-    self.ui.extensionLengthSpinBox.connect("valueChanged(double)", self.updateParameterNodeFromGUI)
-    self.ui.selectOpenBoundariesCheckBox.connect("stateChanged(int)",self.onSelectOpenBoundariesStateChanged)
-    self.ui.addCapsCheckBox.connect("stateChanged(int)",self.updateParameterNodeFromGUI)
     # Buttons
     self.ui.applyButton.connect('clicked(bool)', self.onApplyButton)
 
@@ -183,22 +181,25 @@ class AddFlowExtensionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.inputSurfaceSelector.setCurrentNode(self._parameterNode.GetNodeReference("InputSurface"))
     self.ui.inputCenterlineSelector.setCurrentNode(self._parameterNode.GetNodeReference("InputCenterline"))
     self.ui.outputSurfaceSelector.setCurrentNode(self._parameterNode.GetNodeReference("OutputSurface"))
-    self.ui.extensionLengthSpinBox.value = float(self._parameterNode.GetParameter("ExtensionLength"))
-    
+   
     # Update buttons states and tooltips
-    if self._parameterNode.GetNodeReference("InputSurface") and self._parameterNode.GetNodeReference("InputCenterline") and self._parameterNode.GetNodeReference("OutputSurface"):
+    if self._parameterNode.GetNodeReference("InputSurface") and self._parameterNode.GetNodeReference("InputCenterline"):
+      
+      if not self._parameterNode.GetNodeReference("OutputSurface"):
+        outputNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLModelNode', 'extended_model')
+        self._parameterNode.SetNodeReferenceID("OutputSurface",outputNode.GetID())
+        self.ui.outputSurfaceSelector.setCurrentNode(outputNode)
+      
       self.ui.applyButton.toolTip = "Add flow extensions"
       self.ui.applyButton.enabled = True
+
+      self.updateOpenBoundaries()
+
     else:
       self.ui.applyButton.toolTip = "Select input and output model nodes"
       self.ui.applyButton.enabled = False
 
-    # do not block signals so that related widgets are enabled/disabled according to its state
-    self.ui.selectOpenBoundariesCheckBox.checked = (self._parameterNode.GetParameter("SelectOpenBoundaries") == "true")
-
-    self.ui.addCapsCheckBox.checked = (self._parameterNode.GetParameter("AddCaps") == "true")
-
-
+  
     # All the GUI updates are done
     self._updatingGUIFromParameterNode = False
 
@@ -216,9 +217,6 @@ class AddFlowExtensionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self._parameterNode.SetNodeReferenceID("InputSurface", self.ui.inputSurfaceSelector.currentNodeID)
     self._parameterNode.SetNodeReferenceID("InputCenterline", self.ui.inputCenterlineSelector.currentNodeID)
     self._parameterNode.SetNodeReferenceID("OutputSurface", self.ui.outputSurfaceSelector.currentNodeID)
-    self._parameterNode.SetParameter("ExtensionLength",str(self.ui.extensionLengthSpinBox.value))
-    self._parameterNode.SetParameter("AddCaps", "true" if self.ui.addCapsCheckBox.checked else "false")
-    self._parameterNode.SetParameter("SelectOpenBoundaries", "true" if self.ui.selectOpenBoundariesCheckBox.checked else "false")
     self._parameterNode.EndModify(wasModified)
     
   def onApplyButton(self):
@@ -227,39 +225,51 @@ class AddFlowExtensionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     with slicer.util.tryWithErrorDisplay("Failed to compute results.", waitCursor=True):
 
+
+      from vtk.numpy_interface import dataset_adapter as dsa
+      
       # Compute output
-      inputSurfacePolyData = self.logic.polyDataFromNode(self.ui.inputSurfaceSelector.currentNode())
-      inputCenterlinePolyData = self.logic.polyDataFromNode(self.ui.inputCenterlineSelector.currentNode())
+      inputSurfacePolyData = self.logic.polyDataFromNode(self._parameterNode.GetNodeReference("InputSurface"))
+      inputCenterlinePolyData = self.logic.polyDataFromNode(self._parameterNode.GetNodeReference("InputCenterline"))
       
-      selectOpenBoundaries = (self._parameterNode.GetParameter("SelectOpenBoundaries") == "true")
-      openBoundsIdList = None
-      if selectOpenBoundaries:
-        # get the ids of the open boundaries to extend
-        openBoundsIdList = []
-        for key in self.openBoundariesCheckBoxDict:
-          cb = self.openBoundariesCheckBoxDict[key]
-          if cb.checked:
-            openBoundsIdList.append(key)
-       
-      extensionLength = float(self._parameterNode.GetParameter("ExtensionLength"))
+      openBoundariesIds = self._parameterNode.GetNodeReference("OpenBoundariesIds")
+
+
+      # get the ids of the open boundaries to extend
+      outputSurfacePolyData = inputSurfacePolyData
+      for id in self.openBoundariesCheckBoxDict:
+        checkbox = self.openBoundariesCheckBoxDict[id]
+        if checkbox.checked:
+          # extend the open boundary
+          idPoint = openBoundariesIds.GetNthControlPointPosition(id)
+          
+          extensionLength = self.openBoundariesExtLengthDict[id].value
+
+          # while in the loop, once the surface is extended, the id of barycenters can change from the original id, so check which number it is now
+          # get the barycenters of the open boundaries of the current model
+          baryCenterPolyData = self.logic.getOpenBoundariesBarycenters(outputSurfacePolyData)
+          wrapper = dsa.WrapDataObject(baryCenterPolyData)
+          barycenterPoints = wrapper.Points
+          
+          # which barycenter is closes the the point with label id?
+          dist = (barycenterPoints[:,0]-idPoint[0])**2 + (barycenterPoints[:,1]-idPoint[1])**2 + (barycenterPoints[:,2]-idPoint[2])**2
+          pointIdx = np.argmin(dist)
+
+          outputSurfacePolyData = self.logic.addFlowExtensions(outputSurfacePolyData, inputCenterlinePolyData, [pointIdx],extensionLength)
       
-      outputSurfacePolyData = self.logic.addFlowExtensions(inputSurfacePolyData, inputCenterlinePolyData, openBoundsIdList,extensionLength)
       
-      
-    
-      addCaps = (self._parameterNode.GetParameter("AddCaps") == "true")
-      if addCaps:
+      if self.ui.addCapsCheckBox.checked:
         outputSurfacePolyData = self.logic.addCaps(outputSurfacePolyData)
       
       outputSurfaceNode = self._parameterNode.GetNodeReference("OutputSurface")
       if outputSurfaceNode:
         # add polydata to output node
-        print("addpolydata to output node")
+        #print("addpolydata to output node")
         outputSurfaceNode.SetAndObserveMesh(outputSurfacePolyData)
         if not outputSurfaceNode.GetDisplayNode():
           outputSurfaceNode.CreateDefaultDisplayNodes()
         outputSurfaceNode.GetDisplayNode().SetVisibility(1)
-        outputSurfaceNode.GetDisplayNode().SetOpacity(1)
+        outputSurfaceNode.GetDisplayNode().SetOpacity(0.6)
         outputSurfaceNode.GetDisplayNode().SetColor(0.90,0.34,0.69)
     
       # hide input surface
@@ -267,73 +277,85 @@ class AddFlowExtensionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       if inputSurfaceNode:
         if not inputSurfaceNode.GetDisplayNode():
           inputSurfaceNode.CreateDefaultDisplayNodes()
-        inputSurfaceNode.GetDisplayNode().SetVisibility(0)
-        
-  # this function is called when checkbox "select open boundaries"  changes state
-  def onSelectOpenBoundariesStateChanged(self):
-    
-    self._parameterNode.SetParameter("SelectOpenBoundaries", "true" if self.ui.selectOpenBoundariesCheckBox.checked else "false")
-    
-    selectOpenBoundaries = self.ui.selectOpenBoundariesCheckBox.isChecked()
-    if selectOpenBoundaries:
-      # show the id's of the open boundaries to which flow extensions can be added
-      # compute locations of the open boundaries
-      inputSurfacePolyData = self.logic.polyDataFromNode(self.ui.inputSurfaceSelector.currentNode())
-      
-      # get the barycenters of the open boundaries
-      barycenterPolyData = self.logic.getOpenBoundariesBarycenters(inputSurfacePolyData)
-      
-      # creat/ get reference to markup node to display the boundary ids at the barycenters
-      openBoundariesIdsMarkupsNode = self._parameterNode.GetNodeReference("OpenBoundariesIds")
-      if not openBoundariesIdsMarkupsNode:
-        openBoundariesIdsMarkupsNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode","OpenBoundariesIds")
-       
-        if openBoundariesIdsMarkupsNode:
-          self._parameterNode.SetNodeReferenceID("OpenBoundariesIds",openBoundariesIdsMarkupsNode.GetID())
-      else:
-        # the node already exists, so empty it to fill it with the current barycenters 
-        # empty the node
-        openBoundariesIdsMarkupsNode.RemoveAllMarkups()
-        
-      # add markups corresponding to the barycenters of the open boundaries with the boundary id as label
-      openbounds_ids = []
-      for i in range(barycenterPolyData.GetNumberOfPoints()):
-        point = barycenterPolyData.GetPoint(i)
-        
-        n = openBoundariesIdsMarkupsNode.AddFiducial(point[0],point[1],point[2])
-        openBoundariesIdsMarkupsNode.SetNthControlPointLabel(n,str(i))
-        openbounds_ids.append(i)
-        
-      # now create checkboxes so the user can select which open boundaries to extend
-      hlayout = qt.QHBoxLayout() # horizontal layout to hold the checkboxes
-      self.openBoundariesCheckBoxDict={}
-      for (i,id) in enumerate(openbounds_ids):
-        newCheckBox = ctk.ctkCheckBox()
-        newCheckBox.text=str(id)
-        self.openBoundariesCheckBoxDict[id] = newCheckBox
-        hlayout.addWidget(newCheckBox) # add checkbox widget to layout
-        
-      # add layout with checkboxes to parent layout       
-      self.ui.formLayout.insertRow(4,"id:",hlayout)
-      print("add node")
-      print(self.ui.formLayout.rowCount())
-      
-      # decrease opacity of input model to make the open boundary ids visible
-      inputSurfaceNode = self._parameterNode.GetNodeReference("InputSurface")
-      if inputSurfaceNode:
-        if not inputSurfaceNode.GetDisplayNode():
-          inputSurfaceNode.CreateDefaultDisplayNodes()
-        inputSurfaceNode.GetDisplayNode().SetOpacity(0.5)
-      
+        if inputSurfaceNode != outputSurfaceNode:  
+          inputSurfaceNode.GetDisplayNode().SetVisibility(0)
+
+  def updateOpenBoundaries(self):
+    # show the id's of the open boundaries to which flow extensions can be added
+    # compute locations of the open boundaries
+    #print("updateOpenBoundaries")
+    inputSurfaceNode = self._parameterNode.GetNodeReference("InputSurface")
+    inputSurfacePolyData = self.logic.polyDataFromNode(inputSurfaceNode)
+
+  
+    # get the barycenters of the open boundaries
+    barycenterPolyData = self.logic.getOpenBoundariesBarycenters(inputSurfacePolyData)
+
+    # create/ get reference to markup node to display the boundary ids at the barycenters
+    openBoundariesIdsMarkupsNode = self._parameterNode.GetNodeReference("OpenBoundariesIds")
+    if not openBoundariesIdsMarkupsNode:
+      openBoundariesIdsMarkupsNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode","OpenBoundariesIds")
+      # add to parameter node
+      self._parameterNode.SetNodeReferenceID("OpenBoundariesIds",openBoundariesIdsMarkupsNode.GetID())
     else:
-      # remove the open boundaries markupsnode and related variables, if it exists
-      openBoundariesIdsMarkupsNode = self._parameterNode.GetNodeReference("OpenBoundariesIds")
-      if openBoundariesIdsMarkupsNode:
-        self.openBoundariesCheckBoxDict={}
-        print("remove node")
-        self.ui.formLayout.removeRow(4)
-        slicer.mrmlScene.RemoveNode(openBoundariesIdsMarkupsNode)
-      
+      # the node already exists, so empty it to fill it with the current barycenters 
+      # empty the node
+      openBoundariesIdsMarkupsNode.RemoveAllControlPoints()
+
+    # add barycenter points to markups node
+    openbounds_ids = []
+    for i in range(barycenterPolyData.GetNumberOfPoints()):
+      point = barycenterPolyData.GetPoint(i)
+        
+      openBoundariesIdsMarkupsNode.InsertControlPoint(i,point,str(i))
+      #openBoundariesIdsMarkupsNode.SetNthControlPointLabel(n,str(i))
+      openbounds_ids.append(i)
+        
+    # now create checkboxes so the user can select which open boundaries to extend
+    layout = self.ui.selectOpenBoundariesGroupBox.layout()
+    if layout is not None:
+      # remove all children
+      while layout.count():
+        item=layout.takeAt(0)
+        widget = item.widget()
+        if widget is not None:
+          widget.deleteLater()
+    else:
+      #create layout
+      layout = qt.QGridLayout()
+      self.ui.selectOpenBoundariesGroupBox.setLayout(layout)
+
+    self.openBoundariesCheckBoxDict={}
+    self.openBoundariesExtLengthDict = {}
+    for (i,id) in enumerate(openbounds_ids):
+      newCheckBox = ctk.ctkCheckBox()
+      newCheckBox.text=openBoundariesIdsMarkupsNode.GetNthControlPointLabel(i)
+      newCheckBox.toggled.connect(lambda state, cbId = id: self.onCheckBoxToggled(cbId))
+      newSpinBox = ctk.ctkDoubleSpinBox()
+      newSpinBox.minimum = 0
+      newSpinBox.maximum = 20
+      newSpinBox.singleStep = 0.5
+      newSpinBox.value = 5
+      newSpinBox.enabled = False
+      self.openBoundariesCheckBoxDict[id] = newCheckBox
+      self.openBoundariesExtLengthDict[id] = newSpinBox
+      layout.addWidget(newCheckBox,i,0) # add checkbox widget to layout
+      layout.addWidget(newSpinBox,i,1)
+        
+  
+    # decrease opacity of input model to make the open boundary ids visible
+    if inputSurfaceNode:
+      if not inputSurfaceNode.GetDisplayNode():
+        inputSurfaceNode.CreateDefaultDisplayNodes()
+      inputSurfaceNode.GetDisplayNode().SetOpacity(0.6)
+ 
+  def onCheckBoxToggled(self, id):
+    checkBox = self.openBoundariesCheckBoxDict[id]
+    if checkBox.checked:
+      self.openBoundariesExtLengthDict[id].enabled = True
+    else:
+      self.openBoundariesExtLengthDict[id].enabled = False
+      #enable the spinbox
     
 #
 # AddFlowExtensionLogic
@@ -359,12 +381,7 @@ class AddFlowExtensionLogic(ScriptedLoadableModuleLogic):
     """
     Initialize parameter node with default settings.
     """
-    if not parameterNode.GetParameter("ExtensionLength"):
-      parameterNode.SetParameter("ExtensionLength","5.0")
-    if not parameterNode.GetParameter("SelectOpenBoundaries"):
-      parameterNode.SetParameter("SelectOpenBoundaries", "false")
-    if not parameterNode.GetParameter("AddCaps"):
-      parameterNode.SetParameter("AddCaps", "false")
+   
     return
   
   def polyDataFromNode(self, surfaceNode):

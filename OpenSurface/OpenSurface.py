@@ -66,11 +66,8 @@ class OpenSurfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.layout.addWidget(uiWidget)
     self.ui = slicer.util.childWidgetVariables(uiWidget)
 
-    self.nodeSelectors = [
-    (self.ui.inputSurfaceSelector, "InputSurface"),
-    (self.ui.inputCenterlineSelector, "InputCenterline"),
-    (self.ui.outputSurfaceSelector, "OutputSurface")
-    ]
+    # initialize pointslocator, used in the positioning of the ROI box for clipping, to None 
+    self.pointsLocator = None
 
     # Set scene in MRML widgets. Make sure that in Qt designer the top-level qMRMLWidget's
     # "mrmlSceneChanged(vtkMRMLScene*)" signal in is connected to each MRML widget's.
@@ -90,15 +87,16 @@ class OpenSurfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     # These connections ensure that whenever user changes some settings on the GUI, that is saved in the MRML scene
     # (in the selected parameter node).
-    for nodeSelector, roleName in self.nodeSelectors:
-      nodeSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
-   
+    self.ui.inputSurfaceSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
+    self.ui.inputCenterlineSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
+    self.ui.outputSurfaceSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
+    
     
     # Buttons
     self.ui.applyButton.connect('clicked(bool)', self.onApplyButton)
-    
+
     # slider
-    self.ui.planeLocationWidget.connect('valueChanged(double)', self.setCurrentPlaneIndex)
+    #self.ui.planeLocationWidget.connect('valueChanged(double)', self.setCurrentPlaneIndex)
     
     # Make sure parameter node is initialized (needed for module reload)
     self.initializeParameterNode()
@@ -116,6 +114,14 @@ class OpenSurfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     # Make sure parameter node exists and observed
     self.initializeParameterNode()
+    # shows the ROI box if present
+    ROIBoxNode = self._parameterNode.GetNodeReference("OpenSurface_ROIBox")
+    if ROIBoxNode:
+      ROIBoxNode.SetDisplayVisibility(1)
+      # add observer to move the Roibox
+      crosshairNode=slicer.util.getNode("Crosshair")
+      self.ROIPlacementObservationId = crosshairNode.AddObserver(slicer.vtkMRMLCrosshairNode.CursorPositionModifiedEvent, self.onMouseMoved)
+   
 
   def exit(self):
     """
@@ -123,6 +129,13 @@ class OpenSurfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     # Do not react to parameter node changes (GUI wlil be updated when the user enters into the module)
     self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromParameterNode)
+    # hide the ROI box if present
+    ROIBoxNode = self._parameterNode.GetNodeReference("OpenSurface_ROIBox")
+    if ROIBoxNode:
+      ROIBoxNode.SetDisplayVisibility(0)
+      # remove observer
+      crosshairNode=slicer.util.getNode("Crosshair")
+      crosshairNode.RemoveObserver(self.ROIPlacementObservationId)
 
   def onSceneStartClose(self, caller, event):
     """
@@ -176,37 +189,36 @@ class OpenSurfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     This method is called whenever parameter node is changed.
     The module GUI is updated to show the current state of the parameter node.
     """
-
+    print(event)
     if self._parameterNode is None or self._updatingGUIFromParameterNode:
       return
-
+    print("In UpdateGUIFromParameterNode")
     # Make sure GUI changes do not call updateParameterNodeFromGUI (it could cause infinite loop)
     self._updatingGUIFromParameterNode = True
 
     # Update node selectors and sliders
-    for nodeSelector,roleName in self.nodeSelectors:
-      nodeSelector.setCurrentNode(self._parameterNode.GetNodeReference(roleName))
-      
-    # Update buttons states and tooltips
+    self.ui.inputSurfaceSelector.setCurrentNode(self._parameterNode.GetNodeReference("InputSurface"))
+    self.ui.inputCenterlineSelector.setCurrentNode(self._parameterNode.GetNodeReference("InputCenterline"))
+    self.ui.outputSurfaceSelector.setCurrentNode(self._parameterNode.GetNodeReference("OutputSurface"))
     
-    if (self._parameterNode.GetNodeReference("InputSurface") and self._parameterNode.GetNodeReference("InputCenterline")):
-      
-      if not self.ui.planeLocationWidget.enabled:
-        # set slider range based on number of centerline points
-        centerlineData = self.logic.polyDataFromNode(self._parameterNode.GetNodeReference("InputCenterline"))
-        npoints = centerlineData.GetNumberOfPoints()
-        self.ui.planeLocationWidget.minimum = 0
-        self.ui.planeLocationWidget.maximum = npoints-1
-        #enable slider
-        self.ui.planeLocationWidget.enabled = True 
-        # call setcurrentplaneidx once to display ROI box in GUI
-        val=self._parameterNode.GetParameter("SlicePlaneLocation")
-        self.setCurrentPlaneIndex(val)
-        
-    else:
-      #disable slider
-      self.ui.planeLocationWidget.enabled = False
-       
+    # Update buttons states and tooltips
+    if self._parameterNode.GetNodeReference("InputSurface") and self._parameterNode.GetNodeReference("InputCenterline"):
+      print("*")
+    
+      if not self._parameterNode.GetNodeReference("OpenSurface_ROIBox"):
+        roiBoxReady = self.initializeROIBox()
+        # initialize points locator used in the positioning of the ROI box  
+        if roiBoxReady:
+          if not self.pointsLocator:
+            self.pointsLocator = vtk.vtkPointLocator() # could try using vtk.vtkStaticPointLocator() if need to optimize
+            self.pointsLocator.SetDataSet(self._parameterNode.GetNodeReference("InputCenterline").GetPolyData())
+            self.pointsLocator.BuildLocator() 
+        # initialize output model if none is selected
+      if not self._parameterNode.GetNodeReference("OutputSurface"):
+        outputNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLModelNode', 'open_model')
+        self._parameterNode.SetNodeReferenceID("OutputSurface",outputNode.GetID())
+        self.ui.outputSurfaceSelector.setCurrentNode(outputNode)
+        # 
       
     if self._parameterNode.GetNodeReference("OpenSurface_ROIBox"):
       self.ui.applyButton.toolTip = "Clip surface with ROI" 
@@ -230,35 +242,98 @@ class OpenSurfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     wasModified = self._parameterNode.StartModify()  # Modify all properties in a single batch
     
-    for nodeSelector, roleName in self.nodeSelectors:
-      self._parameterNode.SetNodeReferenceID(roleName, nodeSelector.currentNodeID)
-   
+    self._parameterNode.SetNodeReferenceID("InputSurface", self.ui.inputSurfaceSelector.currentNodeID)
+    self._parameterNode.SetNodeReferenceID("InputCenterline", self.ui.inputCenterlineSelector.currentNodeID)
+    self._parameterNode.SetNodeReferenceID("OutputSurface", self.ui.outputSurfaceSelector.currentNodeID)
+    
     
     self._parameterNode.EndModify(wasModified)
 
+  def initializeROIBox(self):
+    # initialize the ROI box at index 0
+    print("InitializeROIBox")
+    try:
+      # check if centerlinegeometry has already been computed, if not, compute it once
+      centerlineModelNode = self._parameterNode.GetNodeReference("InputCenterline")
+      if not centerlineModelNode.HasPointScalarName("FrenetTangent"):
+        centerlineGeometryPolyData = self.logic.computeCenterlineGeometry(self.logic.polyDataFromNode(centerlineModelNode))
+        centerlineModelNode.SetAndObserveMesh(centerlineGeometryPolyData)
 
-  def setCurrentPlaneIndex(self,value):
-  
-    # store the current slice index to the parameter node
-    self._parameterNode.SetParameter("SlicePlaneLocation", str(self.ui.planeLocationWidget.value))
+      # compute plane normal to centerline
+      plane_idx = 0
+      planeNode = self.logic.createPlaneNormalToCenterline(self.logic.polyDataFromNode(centerlineModelNode), plane_idx, "OpenSurface_SlicePlane") 
+      planeNode.SetHideFromEditors(1)
+    
+      # create ROI BOX markups node
+      roiNode = self._parameterNode.GetNodeReference("OpenSurface_ROIBox")
+      if not roiNode:
+        roiNode = self.logic.createROIBox(planeNode.GetCenter(),planeNode.GetSize()[0],planeNode.GetSize()[0],planeNode.GetSize()[0],"OpenSurface_ROIBox")
+        roiNode.GetDisplayNode().SetPointLabelsVisibility(False)
+        roiNode.GetDisplayNode().SetPropertiesLabelVisibility(False)
+        # add to parameter node
+        self._parameterNode.SetNodeReferenceID("OpenSurface_ROIBox", roiNode.GetID())
+      # get the roibox's planes
+      roiPlanes = vtk.vtkPlanes()
+      roiNode.GetPlanes(roiPlanes)
+      
+      # convert one of the roi planes to markupplane for registration
+      roiPlane0 = roiPlanes.GetPlane(0)
+      planeROINode = self.logic.createPlaneFromOriginAndNormal(roiPlane0.GetOrigin(),roiPlane0.GetNormal(),planeNode.GetSize()[0],"OpenSurface_ROIPlane")
+      planeROINode.SetHideFromEditors(1)
+      
+      #align the roi to the plane normal to the centerline using the roi plane in the aligning process
+      self.logic.alignPlanes(planeNode,planeROINode,roiNode)
+      
+      # remove nodes that are no longer necessary
+      slicer.mrmlScene.RemoveNode(planeNode)
+      slicer.mrmlScene.RemoveNode(planeROINode)
+
+      # setup crosshair to get positionon centerline model. Position can be selected by moving the mouse while holding the shift key. Code based on script repository
+      crosshairNode=slicer.util.getNode("Crosshair")
+      self.ROIPlacementObservationId = crosshairNode.AddObserver(slicer.vtkMRMLCrosshairNode.CursorPositionModifiedEvent, self.onMouseMoved)
+   
+    except Exception as e:
+      slicer.util.errorDisplay("Failed create ROI Box. Please make sure a centerline model is selected. Error: "+str(e))
+      return False
+
+    return True
+    
+  def onMouseMoved(self,observer, eventid):
+    centerlineModelNode = self._parameterNode.GetNodeReference("InputCenterline")
+    crosshairNode = slicer.util.getNode("Crosshair")
+    ras=[0,0,0]
+    crosshairNode.GetCursorPositionRAS(ras)
+    closestPointId = self.pointsLocator.FindClosestPoint(ras)
+    ras = centerlineModelNode.GetPolyData().GetPoint(closestPointId)
+   
+    print(f"RAS={ras}")
+    # redraw ROIbox for clipping
+    self.updateROIBox(closestPointId)   
+
+ 
+  def updateROIBox(self, pointIndex):
+    print("updateROIBox")
+    # only update the ROI box if the pointIndex has changed
+    slicePlaneLocation = int(self._parameterNode.GetParameter("SlicePlaneLocation"))
+    if slicePlaneLocation == pointIndex:
+      return
+    else:
+      # store new location in parameter node
+      self._parameterNode.SetParameter("SlicePlaneLocation", str(pointIndex))
       
     with slicer.util.tryWithErrorDisplay("Failed to compute results.", waitCursor=True):
-      # retreive the centerline curve data
-      inputCenterlinePolyData = self.logic.polyDataFromNode(self._parameterNode.GetNodeReference("InputCenterline"))
-      
-      # compute centerline normals and tangents
-      self.centerlineGeometryPolyData = self.logic.computeCenterlineGeometry(inputCenterlinePolyData)
-      
+     
+      # check if centerlinegeometry has already been computed, if not, compute it once
+      centerlineModelNode = self._parameterNode.GetNodeReference("InputCenterline")
+      if not centerlineModelNode.HasPointScalarName("FrenetTangent"):
+        centerlineGeometryPolyData = self.logic.computeCenterlineGeometry(self.logic.polyDataFromNode(centerlineModelNode))
+        centerlineModelNode.SetAndObserveMesh(centerlineGeometryPolyData)
+
       # Todo: move this to logic class
-     
-      # get the slider plane index 
-      plane_idx = int(float(self._parameterNode.GetParameter("SlicePlaneLocation")))
+      roiNode = self._parameterNode.GetNodeReference("OpenSurface_ROIBox")
       
-      planeNode = self.logic.createPlaneNormalToCenterline(self.centerlineGeometryPolyData, plane_idx, "OpenSurface_SlicePlane") 
+      planeNode = self.logic.createPlaneNormalToCenterline(self.logic.polyDataFromNode(centerlineModelNode), pointIndex, "OpenSurface_SlicePlane") 
       planeNode.SetHideFromEditors(1)
-      
-     
-      roiNode = self.logic.createROIBox(planeNode.GetCenter(),planeNode.GetSize()[0],"OpenSurface_ROIBox",self._parameterNode)
       
       # get the roibox's planes
       roiPlanes = vtk.vtkPlanes()
@@ -270,13 +345,16 @@ class OpenSurfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       planeROINode.SetHideFromEditors(1)
       
       #align the roi to the plane normal to the centerline using the roi plane in the aligning process
-      self.logic.alignPlanes(planeNode,planeROINode,roiNode, self._parameterNode)
+      self.logic.alignPlanes(planeNode,planeROINode,roiNode)
       
+      # resize ROIbox
+      roiNode.SetSize(planeNode.GetSize()[0],planeNode.GetSize()[0],planeNode.GetSize()[0])
+
       # remove nodes that are no longer necessary
       slicer.mrmlScene.RemoveNode(planeNode)
       slicer.mrmlScene.RemoveNode(planeROINode)
       
-      
+ 
    
   def onApplyButton(self):
     """
@@ -290,12 +368,15 @@ class OpenSurfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       outputNode = self._parameterNode.GetNodeReference("OutputSurface")      
       self.logic.clipROIFromModel(modelNode,roiNode,outputNode)
       # display outputnode and hide inputnode
-      #if modelNode is not outputNode:
+      if modelNode is not outputNode:
       #  print("hide inputnode")
-      #  modelNode.SetDisplayVisibility(0)
+        modelNode.SetDisplayVisibility(0)
       outputNode.SetDisplayVisibility(1)
-      outputNode.GetDisplayNode().SetOpacity(1)
+      outputNode.GetDisplayNode().SetOpacity(0.6)
       outputNode.GetDisplayNode().SetColor(0.5,0.9,0.88)
+      
+  
+
 #
 # OpenSurfaceLogic
 #
@@ -412,23 +493,17 @@ class OpenSurfaceLogic(ScriptedLoadableModuleLogic):
     return self.createPlaneFromOriginAndNormal(planeCenter,planeNormal,planeSize,nodename,parameterNode)
     
    
-  def createROIBox(self,center,size,nodename,parameterNode=None):
+  def createROIBox(self,center,xsize,ysize,zsize,nodeName):
     """ Create a square markups ROI box at the given center location and size
     """  
-    roiNode = slicer.mrmlScene.GetNodesByName(nodename).GetItemAsObject(0)
-    if not roiNode:
-      roiNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsROINode',nodename)
-      if parameterNode:
-        # add the ROI to the parameternode
-        parameterNode.SetNodeReferenceID(nodename, roiNode.GetID())
-          
+    roiNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsROINode', nodeName)
     # Update node with location and size of roi
     roiNode.SetCenter(center)
-    roiNode.SetSizeWorld(size,size,size)
+    roiNode.SetSizeWorld(xsize,ysize,zsize)
       
     return roiNode   
 
-  def alignPlanes(self,plane0Node,plane1Node, transformableNode=None, parameterNode=None):
+  def alignPlanes(self,plane0Node,plane1Node, transformableNode=None):
     """ Align two planes through rigid registration of the center, normal, and one corner point.
     apply and harden the transform to planeNode1 and, if provided, an additional  nNode.
     """
