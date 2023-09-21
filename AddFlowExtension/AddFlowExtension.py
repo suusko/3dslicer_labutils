@@ -87,7 +87,6 @@ class AddFlowExtensionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.inputSurfaceSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
     self.ui.inputCenterlineSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
     self.ui.outputSurfaceSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
-    self.ui.addCapsCheckBox.connect("stateChanged(int)",self.updateParameterNodeFromGUI)
     # Buttons
     self.ui.applyButton.connect('clicked(bool)', self.onApplyButton)
 
@@ -200,10 +199,7 @@ class AddFlowExtensionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.applyButton.toolTip = "Select input and output model nodes"
       self.ui.applyButton.enabled = False
 
-   
-    self.ui.addCapsCheckBox.checked = (self._parameterNode.GetParameter("AddCaps") == "true")
-
-
+  
     # All the GUI updates are done
     self._updatingGUIFromParameterNode = False
 
@@ -221,7 +217,6 @@ class AddFlowExtensionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self._parameterNode.SetNodeReferenceID("InputSurface", self.ui.inputSurfaceSelector.currentNodeID)
     self._parameterNode.SetNodeReferenceID("InputCenterline", self.ui.inputCenterlineSelector.currentNodeID)
     self._parameterNode.SetNodeReferenceID("OutputSurface", self.ui.outputSurfaceSelector.currentNodeID)
-    self._parameterNode.SetParameter("AddCaps", "true" if self.ui.addCapsCheckBox.checked else "false")
     self._parameterNode.EndModify(wasModified)
     
   def onApplyButton(self):
@@ -262,8 +257,8 @@ class AddFlowExtensionWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
           outputSurfacePolyData = self.logic.addFlowExtensions(outputSurfacePolyData, inputCenterlinePolyData, [pointIdx],extensionLength)
       
-      addCaps = (self._parameterNode.GetParameter("AddCaps") == "true")
-      if addCaps:
+      
+      if self.ui.addCapsCheckBox.checked:
         outputSurfacePolyData = self.logic.addCaps(outputSurfacePolyData)
       
       outputSurfaceNode = self._parameterNode.GetNodeReference("OutputSurface")
@@ -386,8 +381,7 @@ class AddFlowExtensionLogic(ScriptedLoadableModuleLogic):
     """
     Initialize parameter node with default settings.
     """
-    if not parameterNode.GetParameter("AddCaps"):
-      parameterNode.SetParameter("AddCaps", "false")
+   
     return
   
   def polyDataFromNode(self, surfaceNode):
