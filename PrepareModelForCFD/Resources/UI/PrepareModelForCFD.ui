@@ -119,8 +119,14 @@
       <bool>true</bool>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_2">
-      <item>
+      <item alignment="Qt::AlignHCenter">
        <widget class="QPushButton" name="openModelButton">
+        <property name="maximumSize">
+         <size>
+          <width>16777215</width>
+          <height>16777215</height>
+         </size>
+        </property>
         <property name="text">
          <string>Go to OpenSurface Module</string>
         </property>
@@ -137,8 +143,8 @@
      <property name="collapsed">
       <bool>true</bool>
      </property>
-     <layout class="QHBoxLayout" name="horizontalLayout_2">
-      <item>
+     <layout class="QVBoxLayout" name="verticalLayout_4">
+      <item alignment="Qt::AlignHCenter">
        <widget class="QPushButton" name="addFlowExtensionsButton">
         <property name="text">
          <string>Go to AddFlowExtensions Module</string>
@@ -157,7 +163,7 @@
       <bool>true</bool>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_3">
-      <item>
+      <item alignment="Qt::AlignHCenter">
        <widget class="QPushButton" name="exportModelButton">
         <property name="enabled">
          <bool>true</bool>
