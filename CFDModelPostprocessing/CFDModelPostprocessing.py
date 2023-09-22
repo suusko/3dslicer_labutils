@@ -86,6 +86,7 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
         # These connections ensure that whenever user changes some settings on the GUI, that is saved in the MRML scene
         # (in the selected parameter node).
+        self.ui.filePathLineEdit.currentPathChanged.connect(self.updateParameterNodeFromGUI)
         self.ui.loadButton.connect('clicked(bool)', self.onLoadButton)
         self.ui.scaleFactorLineEdit.connect('textEdited(str)', self.updateParameterNodeFromGUI)
         self.ui.scaleFactorCheckBox.connect("toggled(bool)", self.updateParameterNodeFromGUI)
@@ -200,12 +201,57 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
 
         # Update buttons states and tooltips
+        self.ui.filePathLineEdit.setCurrentPath(self._parameterNode.GetParameter("InputFilePath"))
         self.ui.scaleFactorCheckBox.checked = (self._parameterNode.GetParameter("UseScaleFactor") == "true")
         self.ui.scaleFactorLineEdit.enabled = (self._parameterNode.GetParameter("UseScaleFactor") == "true")
         self.ui.lpsToRasCheckBox.checked = (self._parameterNode.GetParameter("LPSToRAS") == "true")
         
         # update text fields
         self.ui.scaleFactorLineEdit.setText(self._parameterNode.GetParameter("ScaleFactor"))
+
+        # update display scalar 
+        surfaceNode = self._parameterNode.GetNodeReference("SurfaceModel")
+        if surfaceNode:
+            # set visibility
+            surfaceNode.GetDisplayNode().SetVisibility(1) 
+
+            # display scalars
+            surfaceNode.GetDisplayNode().ScalarVisibilityOn()
+            # first scalar in list as active scalar
+            firstScalarName = surfaceNode.GetPolyData().GetPointData().GetArrayName(0)
+            surfaceNode.GetDisplayNode().SetActiveScalar(firstScalarName,vtk.vtkAssignAttribute.POINT_DATA)
+            # set and display color legend
+            surfaceNode.GetDisplayNode().SetAndObserveColorNodeID("vtkMRMLColorTableNodeFileViridis.txt")
+            slicer.modules.colors.logic().AddDefaultColorLegendDisplayNode(surfaceNode)
+                
+            # set in display widget
+            self.ui.surfaceVariablesDisplayWidget.enabled = True
+            self.ui.surfaceVariablesDisplayWidget.setMRMLDisplayNode(surfaceNode.GetDisplayNode())      
+
+            # enable centerline computation
+            self.ui.endPointsMarkupsSelector.enabled = True
+            self.ui.endPointsMarkupsPlaceWidget.enabled = True
+            self.ui.autoDetectEndPointsPushButton.enabled = True
+            self.ui.computeCenterlineButton.enabled = True
+
+            # Center view
+            threeDView=slicer.app.layoutManager().threeDWidget(0).threeDView()
+            # center 3Dview on the scene
+            threeDView.resetFocalPoint()
+            # hide bounding box
+            viewNode = slicer.app.layoutManager().threeDWidget(0).mrmlViewNode()
+            viewNode.SetBoxVisible(0)
+            viewNode.SetAxisLabelsVisible(0)
+            # display orientation marker
+            viewNode.SetOrientationMarkerType(slicer.vtkMRMLAbstractViewNode.OrientationMarkerTypeCube)
+
+        # display inlet boundaries
+        endPointsNode = self._parameterNode.GetNodeReference("EndPoints")
+        if endPointsNode:
+            self.updateInletRadioButtons(endPointsNode)
+            
+            # enable inlet radiobuttons groupbox
+            self.ui.selectInletGroupBox.enabled = True
 
         # initialize/update clipping roi box
         if self._parameterNode.GetNodeReference("CenterlineModel"):
@@ -218,6 +264,16 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
                         self.pointsLocator.SetDataSet(self._parameterNode.GetNodeReference("CenterlineModel").GetPolyData())
                         self.pointsLocator.BuildLocator()
 
+        # set clip ROI button state
+        if self._parameterNode.GetNodeReference("OpenSurface_ROIBox"):
+            # enable clipping button
+            self.ui.applyClipButton.enabled = True
+        if self._parameterNode.GetNodeReference("ROISurfaceModel"):
+            # enable reset button
+            self.ui.resetClipButton.enabled = True
+            self.ui.saveClippedModelButton.enabled = True
+            # hide original surface model
+            surfaceNode.GetDisplayNode().SetVisibility(0) 
 
         # All the GUI updates are done
         self._updatingGUIFromParameterNode = False
@@ -227,7 +283,7 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         This method is called when the user makes any change in the GUI.
         The changes are saved into the parameter node (so that they are restored when the scene is saved and loaded).
         """
-
+        print("updateParameterNodeFromGUI")
         if self._parameterNode is None or self._updatingGUIFromParameterNode:
             return
 
@@ -235,6 +291,7 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
         wasModified = self._parameterNode.StartModify()  # Modify all properties in a single batch
         
+        self._parameterNode.SetParameter("InputFilePath",self.ui.filePathLineEdit.currentPath)
         self._parameterNode.SetParameter("ScaleFactor",self.ui.scaleFactorLineEdit.text)
         self._parameterNode.SetParameter("UseScaleFactor", "true" if self.ui.scaleFactorCheckBox.checked else "false")
         self._parameterNode.SetParameter("LPSToRAS", "true" if self.ui.lpsToRasCheckBox.checked else "false")
@@ -253,6 +310,7 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         with slicer.util.tryWithErrorDisplay("Failed to load file", waitCursor=True):
 
             filePath = self.ui.filePathLineEdit.currentPath
+           
             fileExt = os.path.splitext(filePath)[1]
             print(fileExt)
             # load file using  different approaches based on the file extension
@@ -294,33 +352,8 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
             else:
                 # try loading file using slicer data loader
                 surfaceNode = slicer.util.loadModel(filePath) 
-            
-            # set visibility
-            surfaceNode.GetDisplayNode().SetVisibility(1) 
-
-            # display scalars
-            surfaceNode.GetDisplayNode().ScalarVisibilityOn()
-            # first scalar in list as active scalar
-            firstScalarName = surfaceNode.GetPolyData().GetPointData().GetArrayName(0)
-            surfaceNode.GetDisplayNode().SetActiveScalar(firstScalarName,vtk.vtkAssignAttribute.POINT_DATA)
-            # set and display color legend
-            surfaceNode.GetDisplayNode().SetAndObserveColorNodeID("vtkMRMLColorTableNodeFileViridis.txt")
-            slicer.modules.colors.logic().AddDefaultColorLegendDisplayNode(surfaceNode)
-                
-            # set in display widget
-            self.ui.surfaceVariablesDisplayWidget.enabled = True
-            self.ui.surfaceVariablesDisplayWidget.setMRMLDisplayNode(surfaceNode.GetDisplayNode())                
-
-            # Center view
-            threeDView=slicer.app.layoutManager().threeDWidget(0).threeDView()
-            # center 3Dview on the scene
-            threeDView.resetFocalPoint()
-            # hide bounding box
-            viewNode = slicer.app.layoutManager().threeDWidget(0).mrmlViewNode()
-            viewNode.SetBoxVisible(0)
-            viewNode.SetAxisLabelsVisible(0)
-            # display orientation marker
-            viewNode.SetOrientationMarkerType(slicer.vtkMRMLAbstractViewNode.OrientationMarkerTypeCube)
+                       
+          
 
             # save to parameter node
             self._parameterNode.SetNodeReferenceID("SurfaceModel",surfaceNode.GetID())
@@ -362,9 +395,6 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         # when user removes or adds point to the endpointsNode, recreate the inlet radiobuttons
         endPointsNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointAddedEvent,self.updateInletRadioButtons)
         endPointsNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointRemovedEvent,self.updateInletRadioButtons)
-
-        # enable inlet radiobuttons groupbox
-        self.ui.selectInletGroupBox.enabled = True
 
     def updateInletRadioButtons(self,caller,event=None):
         endPointsNode = caller
@@ -478,9 +508,6 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         # reduce opacity of surface model
         surfaceNode.GetDisplayNode().SetOpacity(0.6)
 
-        # enable clipping button
-        self.ui.applyClipButton.enabled = True
-
     def initializeROIBox(self):
         # initialize the ROI box at index 0
         print("InitializeROIBox")
@@ -521,7 +548,7 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
             slicer.mrmlScene.RemoveNode(planeNode)
             slicer.mrmlScene.RemoveNode(planeROINode)
 
-            # setup crosshair to get positionon centerline model. Position can be selected by moving the mouse while holding the shift key. Code based on script repository
+            # setup crosshair to get position on centerline model. Position can be selected by moving the mouse while holding the shift key. Code based on script repository
             crosshairNode=slicer.util.getNode("Crosshair")
             self.ROIPlacementObservationId = crosshairNode.AddObserver(slicer.vtkMRMLCrosshairNode.CursorPositionModifiedEvent, self.onMouseMoved)
 
@@ -617,9 +644,7 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
             ROIModelNode.GetDisplayNode().SetOpacity(0.6)
             ROIModelNode.GetDisplayNode().SetColor(0.5,0.9,0.88)
 
-            # enable reset button
-            self.ui.resetClipButton.enabled = True
-            self.ui.saveClippedModelButton.enabled = True
+           
 
     def onResetClipButton(self):
         """reset the clipped model to the input model"""
@@ -662,6 +687,9 @@ class CFDModelPostprocessingLogic(ScriptedLoadableModuleLogic):
         """
         Initialize parameter node with default settings.
         """
+        
+        if not parameterNode.GetParameter("InputFilePath"):
+            parameterNode.SetParameter("InputFilePath","")
         if not parameterNode.GetParameter("ScaleFactor"):
             parameterNode.SetParameter("ScaleFactor","1000")
         if not parameterNode.GetParameter("UseScaleFactor"):

@@ -82,6 +82,9 @@
       </item>
       <item row="4" column="0" colspan="2">
        <widget class="QPushButton" name="loadButton">
+        <property name="enabled">
+         <bool>true</bool>
+        </property>
         <property name="text">
          <string>Load</string>
         </property>
@@ -140,10 +143,17 @@
          </widget>
         </item>
         <item>
-         <widget class="qSlicerMarkupsPlaceWidget" name="endPointsMarkupsPlaceWidget"/>
+         <widget class="qSlicerMarkupsPlaceWidget" name="endPointsMarkupsPlaceWidget">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+         </widget>
         </item>
         <item>
          <widget class="ctkPushButton" name="autoDetectEndPointsPushButton">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
           <property name="font">
            <font>
             <pointsize>8</pointsize>
@@ -158,6 +168,9 @@
       </item>
       <item row="2" column="0">
        <widget class="QPushButton" name="computeCenterlineButton">
+        <property name="enabled">
+         <bool>false</bool>
+        </property>
         <property name="text">
          <string>Compute centerline</string>
         </property>
