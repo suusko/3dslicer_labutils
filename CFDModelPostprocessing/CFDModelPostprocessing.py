@@ -1,5 +1,6 @@
 import logging
 import os
+import numpy as np
 
 import vtk
 import qt
@@ -92,11 +93,19 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.ui.scaleFactorCheckBox.connect("toggled(bool)", self.updateParameterNodeFromGUI)
         self.ui.lpsToRasCheckBox.connect("toggled(bool)", self.updateParameterNodeFromGUI)
         self.ui.endPointsMarkupsSelector.connect("currentNodeChanged(vtkMLMLNode*)", self.updateParameterNodeFromGUI)
-        self.ui.autoDetectEndPointsPushButton.connect('clicked(bool)',self.onAutoDetectEndPointsButton)
+        self.ui.autoDetectEndPointsButton.connect('clicked(bool)',self.onAutoDetectEndPointsButton)
         self.ui.computeCenterlineButton.connect('clicked(bool)', self.onComputeCenterlineButton)
         self.ui.applyClipButton.connect('clicked(bool)', self.onApplyClipButton)
         self.ui.resetClipButton.connect('clicked(bool)', self.onResetClipButton)
         self.ui.saveClippedModelButton.connect('clicked(bool)',self.onSaveClippedModelButton)
+        self.ui.endPointsROIMarkupsSelector.connect("currentNodeChanged(vtkMLMLNode*)", self.updateParameterNodeFromGUI)
+        self.ui.autoDetectEndPointsROIButton.connect('clicked(bool)',self.onAutoDetectEndPointsROIButton)
+        self.ui.noCircBinSpinBox.connect('valueChanged(int)', self.updateParameterNodeFromGUI)
+        self.ui.longBinSizeSpinBox.connect('valueChanged(double)', self.updateParameterNodeFromGUI)
+        self.ui.computeMapsButton.connect('clicked(bool)', self.onComputeMapsButton)
+        self.ui.scalarSelectionComboBox.currentTextChanged.connect(self.onScalarSelected)
+        
+
         # set layout to 3D view only
         layoutManager = slicer.app.layoutManager()
         layoutManager.setLayout(slicer.vtkMRMLLayoutNode.SlicerLayoutOneUp3DView)
@@ -189,16 +198,17 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         This method is called whenever parameter node is changed.
         The module GUI is updated to show the current state of the parameter node.
         """
-
+        
         if self._parameterNode is None or self._updatingGUIFromParameterNode:
             return
-
+        print("updateGUIFromParameterNode")
         # Make sure GUI changes do not call updateParameterNodeFromGUI (it could cause infinite loop)
         self._updatingGUIFromParameterNode = True
 
         # Update node selectors and slider
         self.ui.endPointsMarkupsSelector.setCurrentNode(self._parameterNode.GetNodeReference("EndPoints"))
 
+        self.ui.endPointsROIMarkupsSelector.setCurrentNode(self._parameterNode.GetNodeReference("ROIEndPoints"))
 
         # Update buttons states and tooltips
         self.ui.filePathLineEdit.setCurrentPath(self._parameterNode.GetParameter("InputFilePath"))
@@ -208,6 +218,8 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         
         # update text fields
         self.ui.scaleFactorLineEdit.setText(self._parameterNode.GetParameter("ScaleFactor"))
+        self.ui.longBinSizeSpinBox.value = float(self._parameterNode.GetParameter("LongitudinalPatchSize"))   
+        self.ui.noCircBinSpinBox.value = int(self._parameterNode.GetParameter("CircularNumberOfPatches"))   
 
         # update display scalar 
         surfaceNode = self._parameterNode.GetNodeReference("SurfaceModel")
@@ -231,7 +243,7 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
             # enable centerline computation
             self.ui.endPointsMarkupsSelector.enabled = True
             self.ui.endPointsMarkupsPlaceWidget.enabled = True
-            self.ui.autoDetectEndPointsPushButton.enabled = True
+            self.ui.autoDetectEndPointsButton.enabled = True
             self.ui.computeCenterlineButton.enabled = True
 
             # Center view
@@ -263,6 +275,13 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
                         self.pointsLocator = vtk.vtkPointLocator() # could try using vtk.vtkStaticPointLocator() if need to optimize
                         self.pointsLocator.SetDataSet(self._parameterNode.GetNodeReference("CenterlineModel").GetPolyData())
                         self.pointsLocator.BuildLocator()
+           
+            self.ui.longBinSizeSpinBox.enabled = True
+            self.ui.noCircBinSpinBox.enabled = True
+            self.ui.computeMapsButton.enabled = True
+
+            # hide endpointsnode
+            endPointsNode.GetDisplayNode().SetVisibility(0)
 
         # set clip ROI button state
         if self._parameterNode.GetNodeReference("OpenSurface_ROIBox"):
@@ -272,8 +291,36 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
             # enable reset button
             self.ui.resetClipButton.enabled = True
             self.ui.saveClippedModelButton.enabled = True
+            # enable 2d map computation
+            self.ui.endPointsROIMarkupsSelector.enabled = True
+            self.ui.endPointsROIMarkupsPlaceWidget.enabled = True
+            self.ui.autoDetectEndPointsROIButton.enabled = True
             # hide original surface model
             surfaceNode.GetDisplayNode().SetVisibility(0) 
+        
+        # display inlet boundaries for ROI model
+        ROIEndPointsNode = self._parameterNode.GetNodeReference("ROIEndPoints")
+        if ROIEndPointsNode:
+            self.updateROIInletRadioButtons(ROIEndPointsNode)
+            
+            # enable inlet radiobuttons groupbox
+            self.ui.selectROIInletGroupBox.enabled = True
+
+            # hide centerline of original model
+            centerlineModel = self._parameterNode.GetNodeReference("CenterlineModel")
+            if centerlineModel:
+                centerlineModel.GetDisplayNode().SetVisibility(0)
+
+            # Hide ROI Box
+            ROIBoxNode = self._parameterNode.GetNodeReference("OpenSurface_ROIBox")
+            if ROIBoxNode:
+                ROIBoxNode.SetDisplayVisibility(0)
+
+        if self._parameterNode.GetNodeReference("SurfaceMappingModel"):
+            self.ui.scalarSelectionComboBox.enabled = True
+            self.updateScalarSelectionComboBox()
+            # set the layout
+            self.setupMapsLayout()
 
         # All the GUI updates are done
         self._updatingGUIFromParameterNode = False
@@ -283,11 +330,12 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         This method is called when the user makes any change in the GUI.
         The changes are saved into the parameter node (so that they are restored when the scene is saved and loaded).
         """
-        print("updateParameterNodeFromGUI")
+        
         if self._parameterNode is None or self._updatingGUIFromParameterNode:
             return
-
+        print("updateParameterNodeFromGUI")
         self._parameterNode.SetNodeReferenceID("EndPoints", self.ui.endPointsMarkupsSelector.currentNodeID)
+        self._parameterNode.SetNodeReferenceID("ROIEndPoints", self.ui.endPointsROIMarkupsSelector.currentNodeID)
 
         wasModified = self._parameterNode.StartModify()  # Modify all properties in a single batch
         
@@ -295,7 +343,9 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self._parameterNode.SetParameter("ScaleFactor",self.ui.scaleFactorLineEdit.text)
         self._parameterNode.SetParameter("UseScaleFactor", "true" if self.ui.scaleFactorCheckBox.checked else "false")
         self._parameterNode.SetParameter("LPSToRAS", "true" if self.ui.lpsToRasCheckBox.checked else "false")
-        
+        self._parameterNode.SetParameter("LongitudinalPatchSize",str(self.ui.longBinSizeSpinBox.value))
+        self._parameterNode.SetParameter("CircularNumberOfPatches",str(self.ui.noCircBinSpinBox.value))
+        self._parameterNode.SetParameter("SelectedScalarForMapping", self.ui.scalarSelectionComboBox.currentText)
         self._parameterNode.EndModify(wasModified)
 
     def onLoadButton(self):
@@ -352,12 +402,44 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
             else:
                 # try loading file using slicer data loader
                 surfaceNode = slicer.util.loadModel(filePath) 
-                       
-          
 
             # save to parameter node
             self._parameterNode.SetNodeReferenceID("SurfaceModel",surfaceNode.GetID())
+
+    def updateScalarSelectionComboBox(self):
+        # update the scalar selection combobox with the available scalars
+        print("updateScalarSelectionComboBox")
+        surfaceNode = self._parameterNode.GetNodeReference("SurfaceMappingModel")
+        #get the selected scalar, if present, before filling the combobox as this will overwrite the selected scalar to the first in the list
+        selectedScalar = self._parameterNode.GetParameter("SelectedScalarForMapping")
+
+        if not surfaceNode:
+            return
+        nScalars = self.ui.scalarSelectionComboBox.count
+        if nScalars == 0:
+            # fill the combobox
+            # get pointdata scalars
+            nPointDataScalars = surfaceNode.GetPolyData().GetPointData().GetNumberOfArrays()
+            pointScalarList = []
+            for i in range(nPointDataScalars):
+                pointScalarList.append(surfaceNode.GetPolyData().GetPointData().GetArrayName(i))
         
+            # get celldata scalars
+            nCellDataScalars = surfaceNode.GetPolyData().GetCellData().GetNumberOfArrays()
+            cellScalarList = []
+            for i in range(nCellDataScalars):
+                cellScalarList.append(surfaceNode.GetPolyData().GetCellData().GetArrayName(i))
+
+            # clear combobox
+            self.ui.scalarSelectionComboBox.clear()
+
+            # fill combobox with list of selectable scalars
+            self.ui.scalarSelectionComboBox.addItems(pointScalarList + cellScalarList) 
+        
+        if selectedScalar:
+            # set selected scalar in the combobox
+            self.ui.scalarSelectionComboBox.setCurrentText(selectedScalar)
+
     def getPreprocessedPolyData(self, surfaceModelNode):
         """ Preprocess the surface polydata for centerline computation. Code based on ExtractCenterlineWidget and 
         ExtractCenterlineLogic"""
@@ -396,6 +478,33 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         endPointsNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointAddedEvent,self.updateInletRadioButtons)
         endPointsNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointRemovedEvent,self.updateInletRadioButtons)
 
+    def onAutoDetectEndPointsROIButton(self):
+
+        surfaceModelNode = self._parameterNode.GetNodeReference("ROISurfaceModel")
+        endPointsNode = self._parameterNode.GetNodeReference("ROIEndPoints")
+        if not endPointsNode:
+            endPointsNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode",
+                    "CenterlineROIEndPoints")
+            endPointsNode.CreateDefaultDisplayNodes()
+            self._parameterNode.SetNodeReferenceID("ROIEndPoints", endPointsNode.GetID())
+        # Make input surface semi-transparent to make all detected endpoints visible
+        surfaceModelNode.GetDisplayNode().SetOpacity(0.8)
+        
+        self.autoDetectEndPoints(surfaceModelNode,endPointsNode)
+
+        # display endpoint labels
+        endPointsNode.SetControlPointLabelFormat("%d")
+        # update control points with current format
+        slicer.modules.markups.logic().RenameAllControlPointsFromCurrentFormat(endPointsNode)
+        endPointsNode.GetDisplayNode().SetPointLabelsVisibility(True)
+
+        # create radiobuttons so the user can select which endPoint should be the inlet
+        self.updateROIInletRadioButtons(endPointsNode)
+
+        # when user removes or adds point to the endpointsNode, recreate the inlet radiobuttons
+        endPointsNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointAddedEvent,self.updateROIInletRadioButtons)
+        endPointsNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointRemovedEvent,self.updateROIInletRadioButtons)
+
     def updateInletRadioButtons(self,caller,event=None):
         endPointsNode = caller
         # clear existing widgets in the layout
@@ -424,7 +533,36 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
              #connect event handler when the button is toggled
             newRadioButton.toggled.connect(self.onInletRadioButtonToggled)
             layout.addWidget(newRadioButton) # add checkbox widget to layout
-      
+
+    def updateROIInletRadioButtons(self,caller,event=None):
+        endPointsNode = caller
+        # clear existing widgets in the layout
+        layout = self.ui.selectROIInletGroupBox.layout()
+        if layout is not None:
+            # remove all children
+            while layout.count():
+                item=layout.takeAt(0)
+                widget = item.widget()
+                if widget is not None:
+                    widget.deleteLater()
+        else:
+            #create layout
+            layout = qt.QHBoxLayout()
+            self.ui.selectROIInletGroupBox.setLayout(layout)
+        
+        self.ROIinletRadioButtonsList=[]
+        for i in range(endPointsNode.GetNumberOfControlPoints()):
+            newRadioButton = qt.QRadioButton()
+            newRadioButton.text=endPointsNode.GetNthControlPointLabel(i)
+            self.ROIinletRadioButtonsList.append(newRadioButton)
+            # check the radiobutton if its corresponding control point is unchecked to indicate the startpoint for centerline computation
+            if not endPointsNode.GetNthControlPointSelected(i):
+                newRadioButton.checked = True
+
+             #connect event handler when the button is toggled
+            newRadioButton.toggled.connect(self.onROIInletRadioButtonToggled)
+            layout.addWidget(newRadioButton) # add checkbox widget to layout
+
     def onInletRadioButtonToggled(self,checked):
         if not checked:
             return
@@ -435,6 +573,19 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
             
             # get the markupsnode controlpoint associated with the selected radio button and unselect it
             for (i,btn) in enumerate(self.inletRadioButtonsList):
+                if btn.isChecked():
+                     endPointsNode.SetNthControlPointSelected(i,False)    
+
+    def onROIInletRadioButtonToggled(self,checked):
+        if not checked:
+            return
+        else:
+            endPointsNode = self._parameterNode.GetNodeReference("ROIEndPoints")
+            # select all controlpoints, then deselect the one that was marked as inlet
+            slicer.modules.markups.logic().SetAllControlPointsSelected(endPointsNode,True)
+            
+            # get the markupsnode controlpoint associated with the selected radio button and unselect it
+            for (i,btn) in enumerate(self.ROIinletRadioButtonsList):
                 if btn.isChecked():
                      endPointsNode.SetNthControlPointSelected(i,False)    
 
@@ -663,7 +814,284 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         ROIModelNode = self._parameterNode.GetNodeReference("ROISurfaceModel")
         slicer.util.saveNode(ROIModelNode,  outFilePath)
 
-#
+        # enable the centerline computation in the next section for map computation
+        
+
+    def onComputeMapsButton(self):
+        """Compute 2D maps of selected model surface """
+        
+        from vtk.numpy_interface import dataset_adapter as dsa
+
+        # Hide ROI box 
+        ROIModelNode = self._parameterNode.GetNodeReference("ROISurfaceModel")
+        if ROIModelNode:
+            ROIModelNode.SetDisplayVisibility(0)
+        
+        # get the surface, either the ROI surface or the original surface
+        if self._parameterNode.GetNodeReference("ROISurfaceModel"):
+            # get the clipped model
+            surfaceModelNode = self._parameterNode.GetNodeReference("ROISurfaceModel")
+            # get the endPoints to recompute the centerline for the ROI model
+            endPointsNode = self._parameterNode.GetNodeReference("ROIEndPoints")
+            if not endPointsNode:
+                slicer.util.errorDisplay("No endpoints detected for clipped surface model. Please make sure to compute endpoints before proceeding")
+                return
+            
+            # compute centerline
+            ExtractCenterlineLogic = slicer.modules.extractcenterline.widgetRepresentation().self().logic
+            ClipBranchesLogic = slicer.modules.clipbranches.widgetRepresentation().self().logic
+
+            # preprocess polydata to improve centerline computation
+            preprocessedPolyData = self.getPreprocessedPolyData(surfaceModelNode)
+            curveSamplingDistance = 1.0 # default
+            centerlinePolyData, _ = ExtractCenterlineLogic.extractCenterline(preprocessedPolyData,endPointsNode,curveSamplingDistance)
+
+        else:
+            # use the original model
+            surfaceModelNode = self._parameterNode.GetNodeReference("SurfaceModel")
+            centerlineModelNode = self._parameterNode.GetNodeReference("CenterlineModel")
+            centerlinePolyData = centerlineModelNode.GetPolyData()
+            endPointsNode = self._parameterNode.GetNodeReference("EndPoints")
+        
+        # hide the models from the previous step
+        surfaceModelNode.GetDisplayNode().SetVisibility(0)
+        endPointsNode.SetDisplayVisibility(0)
+
+        # get the patch sizes
+        longitudinalPatchSize = float(self._parameterNode.GetParameter("LongitudinalPatchSize"))
+        circularNumberOfPatches = int(self._parameterNode.GetParameter("CircularNumberOfPatches"))
+
+        # compute centerline attributes (abscissa, angular metric)
+        centerlineAttributesPolyData = self.logic.computeCenterlineAttributes(centerlinePolyData)
+        
+        # split centerlines into branches
+        centerlineSplitPolyData = ClipBranchesLogic.computeCenterlineBranches(centerlineAttributesPolyData)
+        
+        # to node
+        newCenterlineNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLModelNode', 'CenterlineForMap')
+        newCenterlineNode.SetAndObserveMesh(centerlineSplitPolyData)  
+        if not newCenterlineNode.GetDisplayNode():
+            newCenterlineNode.CreateDefaultDisplayNodes()   
+        newCenterlineNode.GetDisplayNode().SetVisibility(1) 
+
+        
+        # compute bifurcation reference system along the centerline
+        bifurcationRefSysPolyData = self.logic.computeBifurcationReferenceSystems(centerlineSplitPolyData)
+        
+        # split the surface into its constituent branches
+        surfaceSplitPolyData = self.logic.splitSurface(surfaceModelNode.GetPolyData(),centerlineSplitPolyData)
+        
+        # compute branch metrics (Abscissametric and Angular metric)
+        surfaceMetricsPolyData = self.logic.computeBranchMetrics(surfaceSplitPolyData, centerlineSplitPolyData)
+        
+        # metrics mapping to branches
+        surfaceMappingPolyData = self.logic.computeBranchMapping(surfaceMetricsPolyData,centerlineSplitPolyData,bifurcationRefSysPolyData)
+        
+        # To node for display
+        surfaceMappingNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLModelNode', 'WSSModelMappingNode')
+        surfaceMappingNode.SetAndObserveMesh(surfaceMappingPolyData)  
+        if not surfaceMappingNode.GetDisplayNode():
+            surfaceMappingNode.CreateDefaultDisplayNodes()     
+        
+        
+
+        # get the group ids of the different branches
+        surfWrapper = dsa.WrapDataObject(surfaceMappingPolyData)
+        groupIdsArray =  np.unique(surfWrapper.PointData.GetArray("GroupIds"))
+        # save array to parameter node
+        self._parameterNode.SetParameter("BranchIds",' '.join([str(x) for x in groupIdsArray] ))
+        
+        # create layout
+        (view1Node, view2Node) = self.setupMapsLayout()
+
+        # loop over the branches
+        # split and analyse the branches separately
+        for branchId in groupIdsArray:
+            
+            print(branchId)
+            surfaceBranchMappingPolyData = self.logic.splitSurface(surfaceMappingPolyData,centerlineSplitPolyData,groupIds=[branchId])
+            # patching of surface mesh and attributes
+            (surfaceBranchPatchingPolyData, surfaceBranchPatchedPolyData) = self.logic.computeBranchPatching(surfaceBranchMappingPolyData, longitudinalPatchSize,circularNumberOfPatches)
+            #print(surfaceBranchPatchedPolyData)
+            surfaceName = f'Branch{branchId}PatchingModel'
+            # to node
+            surfacePatchingNode= slicer.mrmlScene.AddNewNodeByClass('vtkMRMLModelNode', surfaceName)
+            surfacePatchingNode.SetAndObserveMesh(surfaceBranchPatchingPolyData)  
+            if not surfacePatchingNode.GetDisplayNode():
+                surfacePatchingNode.CreateDefaultDisplayNodes()
+            # set the viewnode ID for the view to display this node in
+            surfacePatchingNode.GetDisplayNode().AddViewNodeID(view1Node.GetID())
+            surfacePatchingNode.GetDisplayNode().SetVisibility(1) 
+            # save node to parameter node
+            self._parameterNode.SetNodeReferenceID(surfaceName,surfacePatchingNode.GetID())
+
+            # store patched data in volumenode
+            vol2DName = f'Branch{branchId}_2DPatchedModel'
+            surface2DPatchingNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLScalarVolumeNode', vol2DName)
+            surface2DPatchingNode.SetAndObserveImageData(surfaceBranchPatchedPolyData);
+            # save node to parameter node
+            self._parameterNode.SetNodeReferenceID(vol2DName,surface2DPatchingNode.GetID())
+
+        # in the second view, display the angular metric on the mapping node
+        surfaceMappingNode.GetDisplayNode().SetActiveScalar("AngularMetric",vtk.vtkAssignAttribute.POINT_DATA)
+        surfaceMappingNode.GetDisplayNode().SetVisibility(1)
+        surfaceMappingNode.GetDisplayNode().SetOpacity(0.6)  
+        surfaceMappingNode.GetDisplayNode().AddViewNodeID(view2Node.GetID())
+        surfaceMappingNode.GetDisplayNode().SetAndObserveColorNodeID("vtkMRMLColorTableNodeFileViridis.txt")
+        colorLegendDisplayNode = slicer.modules.colors.logic().AddDefaultColorLegendDisplayNode(surfaceMappingNode)
+        colorLegendDisplayNode.SetTitleText(surfaceMappingNode.GetDisplayNode().GetActiveScalarName())
+        # save to parameter node (save this node last as it is used to update the GUI, which requires the 2D map computations for the branches to 
+        # be saved to the parameter node already)
+        self._parameterNode.SetNodeReferenceID("SurfaceMappingModel",surfaceMappingNode.GetID())
+
+        # display endpoints node in view2
+        endPointsNode.GetDisplayNode().AddViewNodeID(view2Node.GetID())        
+        endPointsNode.SetDisplayVisibility(1)
+
+        # display node in view2
+        newCenterlineNode.GetDisplayNode().AddViewNodeID(view2Node.GetID())
+
+        # reset views
+        slicer.app.layoutManager().threeDWidget(0).threeDView().resetFocalPoint()
+        slicer.app.layoutManager().threeDWidget(1).threeDView().resetFocalPoint()
+
+
+
+    def setupMapsLayout(self):
+        # get branch Ids from parameter node
+        branchIds = [int(s) for s in self._parameterNode.GetParameter("BranchIds").split(' ')]
+        nBranches = len(branchIds)
+        # create custom layout for display
+        startString = """
+            <layout type="horizontal" split="true">
+             <item splitSize="300">
+              <view class="vtkMRMLViewNode" singletontag="1">
+               <property name="viewlabel" action="default">1</property>
+               <property name=\"viewcolor\" action=\"default\">#F34A33</property>"
+              </view>
+             </item>
+             <item splitSize="300">
+              <view class="vtkMRMLViewNode" singletontag="2">
+               <property name="viewlabel" action="default">2</property>
+               <property name=\"viewcolor\" action=\"default\">#F34A33</property>"
+              </view>
+             </item>
+             <item splitSize="400">
+              <layout type="tab">"""
+        
+        branchStringList = [None]*nBranches
+        for i in range(nBranches):
+            branchId = branchIds[i]
+            branchStringList[i] = (f""" <item name="Branch {branchId}">
+            <view class="vtkMRMLSliceNode" singletontag="SliceView{i+1}">
+                 <property name="orientation" action="default">Axial</property>
+                 <property name="viewlabel" action="default">Branch {branchId} 2D Map</property>
+                 <property name="viewcolor" action="default">#F34A33</property>
+                </view>
+               </item>""")
+
+        endString= """</layout>
+             </item>
+            </layout>
+            """
+        
+        customLayout = startString + ''.join(branchStringList)+endString
+
+        # Built-in layout IDs are all below 100, so you can choose any large random number
+        # for your custom layout ID.
+        customLayoutId=501
+        
+        layoutManager = slicer.app.layoutManager()
+        layoutManager.layoutLogic().GetLayoutNode().AddLayoutDescription(customLayoutId, customLayout)
+        layoutManager.setLayout(customLayoutId)# 3D and table view
+        
+        # references to view nodes
+        view1Node = slicer.util.getNode("View1")
+        view2Node = slicer.util.getNode("View2")
+        # set the views
+        # hide bounding box
+        view1Node.SetBoxVisible(0)
+        view1Node.SetAxisLabelsVisible(0)
+        # display orientation marker
+        view1Node.SetOrientationMarkerType(slicer.vtkMRMLAbstractViewNode.OrientationMarkerTypeCube)
+        # hide bounding box
+        view2Node.SetBoxVisible(0)
+        view2Node.SetAxisLabelsVisible(0)
+        # display orientation marker
+        view2Node.SetOrientationMarkerType(slicer.vtkMRMLAbstractViewNode.OrientationMarkerTypeCube)
+
+        return(view1Node, view2Node)
+
+    def onScalarSelected(self,scalarName):
+        # save to parameter node
+        self._parameterNode.SetParameter("SelectedScalarForMapping",scalarName)
+        print("onScalarSelected")
+        print(scalarName)
+        groupIdsArray = [int(s) for s in self._parameterNode.GetParameter("BranchIds").split(' ')]
+        for i,branchId in enumerate(groupIdsArray):
+            surfaceName = f'Branch{branchId}PatchingModel'
+            
+            print(surfaceName)
+            surfacePatchingNode = self._parameterNode.GetNodeReference(surfaceName)
+            surfacePatchingNode.GetDisplayNode().SetActiveScalar(scalarName,vtk.vtkAssignAttribute.CELL_DATA)
+            surfacePatchingNode.GetDisplayNode().SetAndObserveColorNodeID("vtkMRMLColorTableNodeFileViridis.txt")
+            surfacePatchingNode.GetDisplayNode().ScalarVisibilityOn()
+
+            vol2DName = f'Branch{branchId}_2DPatchedModel'
+            surface2DPatchedNode = self._parameterNode.GetNodeReference(vol2DName)
+            # get out the imagedata
+            imgdata = surface2DPatchedNode.GetImageData()
+            # create 2D map    
+            branch2DMap= self.logic.extractVariableMap(imgdata,scalarName)
+            
+            map2DName = f'Branch{branchId}_2D_Map'
+            map2DNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode",map2DName)
+            # to parameter node
+            self._parameterNode.SetNodeReferenceID(map2DName,map2DNode.GetID())
+            # show 2D color map
+            slicer.util.updateVolumeFromArray(map2DNode, branch2DMap)
+            slicer.app.layoutManager().sliceWidget(f"SliceView{i+1}").sliceLogic().GetSliceCompositeNode().SetForegroundVolumeID(map2DNode.GetID())  # setvolume node as the foreground volume of the SliceView1 slice widget.
+            map2DNode.GetDisplayNode().AddViewNodeID(slicer.util.getNode(f"SliceView{i+1}").GetID())
+            map2DNode.GetDisplayNode().SetInterpolate(0)
+            # TODO: add colorbar (does not work as before...)
+            map2DNode.GetDisplayNode().SetAndObserveColorNodeID("vtkMRMLColorTableNodeFileViridis.txt")
+            slicer.modules.colors.logic().AddDefaultColorLegendDisplayNode(map2DNode)
+            
+        # reset slice views
+        slicer.util.resetSliceViews()
+           
+    def onSaveMapsButton(self):
+        import ScreenCapture
+
+        # path to save to
+        filePath = self.ui.filePathLineEdit.currentPath
+        filePath_NoExt = os.path.splitext(filePath)[0]
+
+        # ids of branches to save
+        groupIdsArray = [int(s) for s in self._parameterNode.GetParameter("BranchIds").split(' ')]
+        # loop over all branches
+        for i,branchId in enumerate(groupIdsArray):
+            # save 3D patched surfaces to file 
+            surfacePatchingName =  f'Branch{branchId}PatchingModel'
+            surfacePatchingModel = self._parameterNode.GetNodeReference(surfacePatchingName)
+            outFilePath = ''.join((filePath_NoExt,f'_Branch{branchId}.vtp'))
+            slicer.util.saveNode(surfacePatchingModel,  outFilePath)
+            
+            # save results for selected scalar to file
+            #save 2D wss maps to .csv, prox at the bottom, dist at the top
+            map2DName = f'Branch{branchId}_2D_Map'
+            map2DNode = self._parameterNode.GetNodeReference(map2DName)
+            branch2DMap = slicer.util.arrayFromVolume(map2DNode)
+            outFilePath = ''.join((filePath_NoExt,f'_Branch{branchId}_2DMap.csv'))
+            np.savetxt(outFilePath, np.fliplr(np.flipud(branch2DMap)), delimiter=",",fmt='%1.3f')
+
+            # save screen captures to file
+            outFilePath = ''.join((filePath_NoExt,f'_Branch{branchId}_2DMap.png'))
+            view = slicer.app.layoutManager().sliceWidget(f"SliceView{i+1}").sliceView()
+            # Capture a screenshot
+            cap = ScreenCapture.ScreenCaptureLogic()
+            cap.captureImageFromView(view, outFilePath)
+            
 # CFDModelPostprocessingLogic
 #
 
@@ -683,6 +1111,27 @@ class CFDModelPostprocessingLogic(ScriptedLoadableModuleLogic):
         """
         ScriptedLoadableModuleLogic.__init__(self)
 
+        self.radiusArrayName = 'Radius'
+        self.blankingArrayName = 'Blanking'
+        self.groupIdsArrayName = 'GroupIds'
+        self.normalsArrayName = 'ParallelTransportNormals'
+        self.abscissaArrayName = 'Abscissas'
+        self.angularMetricArrayName = 'AngularMetric'
+        self.abscissaMetricArrayName = 'AbscissaMetric'
+        self.tractIdsArrayName = 'TractIds'
+        self.centerlineIdsArrayName = 'CenterlineIds'
+        self.parallelTransportNormalsArrayName = 'ParallelTransportNormals'
+        self.referenceSystemsNormalArrayName = 'Normal'
+        self.referenceSystemsUpNormalArrayName = 'UpNormal'
+        self.boundaryMetricArrayName = 'BoundaryMetric' 
+        self.harmonicMappingArrayName = 'HarmonicMapping'
+        self.stretchedMappingArrayName = 'StretchedMapping' 
+        self.longitudinalMappingArrayName = 'StretchedMapping'
+        self.circularMappingArrayName = 'AngularMetric' 
+        self.longitudinalPatchNumberArrayName = 'Slab'
+        self.circularPatchNumberArrayName = 'Sector'
+        self.patchAreaArrayName = 'PatchArea'
+
     def setDefaultParameters(self, parameterNode):
         """
         Initialize parameter node with default settings.
@@ -698,10 +1147,215 @@ class CFDModelPostprocessingLogic(ScriptedLoadableModuleLogic):
             parameterNode.SetParameter("LPSToRAS","false")
         if not parameterNode.GetParameter("SlicePlaneLocation"):
             parameterNode.SetParameter("SlicePlaneLocation", "0")
+        if not parameterNode.GetParameter("LongitudinalPatchSize"):
+            parameterNode.SetParameter("LongitudinalPatchSize", "1.0")
+        if not parameterNode.GetParameter("CircularNumberOfPatches"):
+            parameterNode.SetParameter("CircularNumberOfPatches", "8") 
+        if not parameterNode.GetParameter("BranchIds"):
+            parameterNode.SetParameter("BranchIds","")   
+        if not parameterNode.GetParameter("SelectedScalarForMapping"):
+            parameterNode.SetParameter("SelectedScalarForMapping","")
             
-   
+    def computeBifurcationReferenceSystems(self,centerlinePolyData):
+        """ compute bifurcation reference systems. Based on vmtkbifurcationreferencesystems pyscript"""
+        import vtkvmtkComputationalGeometryPython as vtkvmtkComputationalGeometry
+        
+        bifRefSystems = vtkvmtkComputationalGeometry.vtkvmtkCenterlineBifurcationReferenceSystems()
+        bifRefSystems.SetInputData(centerlinePolyData)
+        bifRefSystems.SetRadiusArrayName(self.radiusArrayName)
+        bifRefSystems.SetBlankingArrayName(self.blankingArrayName)
+        bifRefSystems.SetGroupIdsArrayName(self.groupIdsArrayName)
+        bifRefSystems.SetNormalArrayName(self.referenceSystemsNormalArrayName)
+        bifRefSystems.SetUpNormalArrayName(self.referenceSystemsUpNormalArrayName)
+        bifRefSystems.Update()
+        
+        return bifRefSystems.GetOutput()
 
+    def splitSurface(self,surfacePolyData,centerlinePolyData,groupIds=None):
+        """ split polysurface into branches based on split centerline. Based on vmtkbranchclipper pyscript"""
+        import vtkvmtkComputationalGeometryPython as vtkvmtkComputationalGeometry
+        
+        clipper = vtkvmtkComputationalGeometry.vtkvmtkPolyDataCenterlineGroupsClipper()
+        clipper.SetInputData(surfacePolyData)
+        clipper.SetCenterlines(centerlinePolyData)
+        clipper.SetCenterlineGroupIdsArrayName(self.groupIdsArrayName)
+        clipper.SetGroupIdsArrayName(self.groupIdsArrayName)
+        clipper.SetCenterlineRadiusArrayName(self.radiusArrayName)
+        clipper.SetBlankingArrayName(self.blankingArrayName)
+        clipper.SetCutoffRadiusFactor(1E16)
+        clipper.SetClipValue(0.0)
+        clipper.SetUseRadiusInformation(1)
+        if groupIds:
+            groupIdsList = vtk.vtkIdList()
+            for groupId in groupIds:
+                groupIdsList.InsertNextId(groupId)
+            clipper.SetCenterlineGroupIds(groupIdsList)
+            clipper.ClipAllCenterlineGroupIdsOff()  
+        else:
+            clipper.ClipAllCenterlineGroupIdsOn() # clip all branches 
+        clipper.GenerateClippedOutputOff() # not insideout
+        clipper.Update()
+        
+        return clipper.GetOutput()
+        
+    def computeBranchMetrics(self,surfacePolyData,centerlinePolyData):
+        """ compute metrics, based on vmtkbranchmetrics pyscript"""
+        import vtkvmtkComputationalGeometryPython as vtkvmtkComputationalGeometry
+        
+        # compute angular metric
+        angularMetricFilter = vtkvmtkComputationalGeometry.vtkvmtkPolyDataCenterlineAngularMetricFilter()
+        angularMetricFilter.SetInputData(surfacePolyData)
+        angularMetricFilter.SetMetricArrayName(self.angularMetricArrayName)
+        angularMetricFilter.SetGroupIdsArrayName(self.groupIdsArrayName)
+        angularMetricFilter.SetCenterlines(centerlinePolyData)
+        angularMetricFilter.SetRadiusArrayName(self.radiusArrayName)
+        angularMetricFilter.SetCenterlineNormalsArrayName(self.normalsArrayName)
+        angularMetricFilter.SetCenterlineGroupIdsArrayName(self.groupIdsArrayName)
+        angularMetricFilter.SetCenterlineTractIdsArrayName(self.tractIdsArrayName)
+        angularMetricFilter.UseRadiusInformationOff()
+        angularMetricFilter.IncludeBifurcationsOff()
+        angularMetricFilter.SetBlankingArrayName(self.blankingArrayName)
+        angularMetricFilter.SetCenterlineIdsArrayName(self.centerlineIdsArrayName)
+        angularMetricFilter.Update()
+        
+        # compute abscissa metric
+        abscissaMetricFilter = vtkvmtkComputationalGeometry.vtkvmtkPolyDataCenterlineAbscissaMetricFilter()
+        abscissaMetricFilter.SetInputData(angularMetricFilter.GetOutput())
+        abscissaMetricFilter.SetMetricArrayName(self.abscissaMetricArrayName)
+        abscissaMetricFilter.SetGroupIdsArrayName(self.groupIdsArrayName)
+        abscissaMetricFilter.SetCenterlines(centerlinePolyData)
+        abscissaMetricFilter.SetRadiusArrayName(self.radiusArrayName)
+        abscissaMetricFilter.SetAbscissasArrayName(self.abscissaArrayName)
+        abscissaMetricFilter.SetCenterlineGroupIdsArrayName(self.groupIdsArrayName)
+        abscissaMetricFilter.SetCenterlineTractIdsArrayName(self.tractIdsArrayName)
+        abscissaMetricFilter.UseRadiusInformationOff()
+        abscissaMetricFilter.IncludeBifurcationsOn()
+        abscissaMetricFilter.SetBlankingArrayName(self.blankingArrayName)
+        abscissaMetricFilter.SetCenterlineIdsArrayName(self.centerlineIdsArrayName)
+        abscissaMetricFilter.Update()
+        
+        return abscissaMetricFilter.GetOutput()
+        
+    def computeBranchMapping(self, surfacePolyData, centerlinePolyData,referenceSystems):
+        """ compute branch mapping, based on vmtkbrancmapping pyscript"""
+        import vtkvmtkComputationalGeometryPython as vtkvmtkComputationalGeometry
+        import vtkvmtkDifferentialGeometryPython as vtkvmtkDifferentialGeometry
+                
+        boundaryMetricFilter = vtkvmtkComputationalGeometry.vtkvmtkPolyDataReferenceSystemBoundaryMetricFilter()
+        boundaryMetricFilter.SetInputData(surfacePolyData)
+        boundaryMetricFilter.SetBoundaryMetricArrayName(self.boundaryMetricArrayName)
+        boundaryMetricFilter.SetGroupIdsArrayName(self.groupIdsArrayName)
+        boundaryMetricFilter.SetCenterlines(centerlinePolyData)
+        boundaryMetricFilter.SetCenterlineAbscissasArrayName(self.abscissaArrayName)
+        boundaryMetricFilter.SetCenterlineRadiusArrayName(self.radiusArrayName)
+        boundaryMetricFilter.SetCenterlineGroupIdsArrayName(self.groupIdsArrayName)
+        boundaryMetricFilter.SetCenterlineTractIdsArrayName(self.tractIdsArrayName)
+        boundaryMetricFilter.SetCenterlineIdsArrayName(self.centerlineIdsArrayName)
+        boundaryMetricFilter.SetReferenceSystems(referenceSystems)
+        boundaryMetricFilter.SetReferenceSystemGroupIdsArrayName(self.groupIdsArrayName)
+        boundaryMetricFilter.Update()
 
+        harmonicMappingFilter = vtkvmtkDifferentialGeometry.vtkvmtkPolyDataMultipleCylinderHarmonicMappingFilter()
+        harmonicMappingFilter.SetInputConnection(boundaryMetricFilter.GetOutputPort())
+        harmonicMappingFilter.SetHarmonicMappingArrayName(self.harmonicMappingArrayName)
+        harmonicMappingFilter.SetGroupIdsArrayName(self.groupIdsArrayName)
+        harmonicMappingFilter.Update()
+
+        
+        stretchFilter = vtkvmtkComputationalGeometry.vtkvmtkPolyDataStretchMappingFilter()
+        stretchFilter.SetInputConnection(harmonicMappingFilter.GetOutputPort())
+        stretchFilter.SetStretchedMappingArrayName(self.stretchedMappingArrayName)
+        stretchFilter.SetHarmonicMappingArrayName(self.harmonicMappingArrayName)
+        stretchFilter.SetGroupIdsArrayName(self.groupIdsArrayName)
+        stretchFilter.SetMetricArrayName(self.abscissaMetricArrayName)
+        stretchFilter.SetBoundaryMetricArrayName(self.boundaryMetricArrayName)
+        stretchFilter.UseBoundaryMetricOn()
+        stretchFilter.Update()
+
+        return stretchFilter.GetOutput()
+        
+    def computeBranchPatching(self,surfacePolyData,longitudinalPatchSize, circularNumberOfPatches):
+        """ compute patching of surface and attributes, based on vmtkbranchmapping pyscript """
+        
+        import vtkvmtkComputationalGeometryPython as vtkvmtkComputationalGeometry
+        
+        patchSize = [longitudinalPatchSize, 1.0/float(circularNumberOfPatches)]
+        
+        patchingFilter = vtkvmtkComputationalGeometry.vtkvmtkPolyDataPatchingFilter()
+        patchingFilter.SetInputData(surfacePolyData)
+        patchingFilter.SetCircularPatching(1)
+        patchingFilter.SetUseConnectivity(1)
+        patchingFilter.SetLongitudinalMappingArrayName(self.longitudinalMappingArrayName)
+        patchingFilter.SetCircularMappingArrayName(self.circularMappingArrayName)
+        patchingFilter.SetLongitudinalPatchNumberArrayName(self.longitudinalPatchNumberArrayName)
+        patchingFilter.SetCircularPatchNumberArrayName(self.circularPatchNumberArrayName)
+        patchingFilter.SetPatchAreaArrayName(self.patchAreaArrayName)
+        patchingFilter.SetGroupIdsArrayName(self.groupIdsArrayName)
+        patchingFilter.SetPatchSize(patchSize)
+        patchingFilter.Update()
+
+        return (patchingFilter.GetOutput(), patchingFilter.GetPatchedData())
+        
+    def flattenMappedSurface(mappedSurfacePolyData):
+        # code based on discussion at http:
+    
+        # requires surface mapped with vmtkBranchMapping 
+        # as we need the AngularMetric and the StretchedMapping arrays
+        numberofpoints = mappedSurfacePolyData.GetNumberOfPoints()
+        points = vtk.vtkPoints()
+        points.SetNumberOfPoints(numberofpoints)    
+
+        for i in range(numberofpoints):
+        
+            pointx =mapped_surface.GetPointData().GetArray(self.angularMetricArrayName).GetValue(i)
+            pointy = mapped_surface.GetPointData().GetArray(self.stretchedMappingArrayName).GetValue(i)
+            pointz = 0.0
+            point = (pointx, pointy, pointz)
+            points.SetPoint(i,point)
+
+        output = vtk.vtkPolyData()
+        output.DeepCopy(mappedSurfacePolyData)
+        output.SetPoints(points)
+
+        return output 
+
+    def extractVariableMap(self,patched2DImage,variableName):
+        from vtk.numpy_interface import dataset_adapter as dsa
+        imwrapped = dsa.WrapDataObject(patched2DImage)
+        patchVariableData = np.squeeze(imwrapped.PointData.GetArray(variableName).reshape(patched2DImage.GetDimensions(),order='F')).T
+        #patchStretchedMappingData = np.squeeze(imwrapped.PointData.GetArray('StretchedMapping').reshape(surface_patched_2D.GetDimensions(),order='F')).T
+        #patchAngularmetricData = np.squeeze(imwrapped.PointData.GetArray('AngularMetric').reshape(surface_patched_2D.GetDimensions(),order='F')).T
+        
+        return patchVariableData 
+    
+    def extractCenterlineGroup(self,centerlinePolyData,groupId):
+        """ extract single centerline based on groupID
+            returns dictionary with points and pointIds
+        """
+    
+        clData = self.centerlineToNumpy(centerlinePolyData)
+        # get the points corresponding to the groupId
+        groupIdIdx = np.where(clData['CellData']['GroupIds']==groupId)[0][0]
+        pointIds = clData['CellData']['CellPointIds'][groupIdIdx]
+        points = clData['Points'][pointIds]
+        centerlineData = dict()
+        centerlineData['PointIds'] = pointIds
+        centerlineData['Points'] = points
+    
+        return centerlineData
+    
+    def computeCenterlineAttributes(self, centerlinePolyData):
+        """ compute centerline attributes such as AbscissaMetric,AngularMetric 
+         and ParallelTransportNormals
+        """
+        import vtkvmtkComputationalGeometryPython as vtkvmtkComputationalGeometry
+        attributesFilter = vtkvmtkComputationalGeometry.vtkvmtkCenterlineAttributesFilter()
+        attributesFilter.SetInputData(centerlinePolyData)
+        attributesFilter.SetAbscissasArrayName(self.abscissaArrayName)
+        attributesFilter.SetParallelTransportNormalsArrayName(self.parallelTransportNormalsArrayName)
+        attributesFilter.Update()
+    
+        return attributesFilter.GetOutput()
 #
 # CFDModelPostprocessingTest
 #
