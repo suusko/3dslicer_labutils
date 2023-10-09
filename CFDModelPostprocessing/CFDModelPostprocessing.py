@@ -104,7 +104,7 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.ui.longBinSizeSpinBox.connect('valueChanged(double)', self.updateParameterNodeFromGUI)
         self.ui.computeMapsButton.connect('clicked(bool)', self.onComputeMapsButton)
         self.ui.scalarSelectionComboBox.currentTextChanged.connect(self.onScalarSelected)
-        
+        self.ui.saveMapsButton.connect('clicked(bool)',self.onSaveMapsButton)
 
         # set layout to 3D view only
         layoutManager = slicer.app.layoutManager()
@@ -321,6 +321,8 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
             self.updateScalarSelectionComboBox()
             # set the layout
             self.setupMapsLayout()
+            # enable save button
+            self.ui.saveMapsButton.enabled = True
 
         # All the GUI updates are done
         self._updatingGUIFromParameterNode = False
@@ -893,8 +895,6 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         if not surfaceMappingNode.GetDisplayNode():
             surfaceMappingNode.CreateDefaultDisplayNodes()     
         
-        
-
         # get the group ids of the different branches
         surfWrapper = dsa.WrapDataObject(surfaceMappingPolyData)
         groupIdsArray =  np.unique(surfWrapper.PointData.GetArray("GroupIds"))
@@ -954,7 +954,6 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         # reset views
         slicer.app.layoutManager().threeDWidget(0).threeDView().resetFocalPoint()
         slicer.app.layoutManager().threeDWidget(1).threeDView().resetFocalPoint()
-
 
 
     def setupMapsLayout(self):
@@ -1067,6 +1066,12 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         filePath = self.ui.filePathLineEdit.currentPath
         filePath_NoExt = os.path.splitext(filePath)[0]
 
+        # save the complete 3D geometry with mapped data
+        surfaceMappingNode = self._parameterNode.GetNodeReference("SurfaceMappingModel")
+        outFilePath = ''.join((filePath_NoExt,f'_Mapping.vtp'))
+        slicer.util.saveNode(surfaceMappingNode,  outFilePath)
+            
+
         # ids of branches to save
         groupIdsArray = [int(s) for s in self._parameterNode.GetParameter("BranchIds").split(' ')]
         # loop over all branches
@@ -1081,7 +1086,7 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
             #save 2D wss maps to .csv, prox at the bottom, dist at the top
             map2DName = f'Branch{branchId}_2D_Map'
             map2DNode = self._parameterNode.GetNodeReference(map2DName)
-            branch2DMap = slicer.util.arrayFromVolume(map2DNode)
+            branch2DMap = np.squeeze(slicer.util.arrayFromVolume(map2DNode))
             outFilePath = ''.join((filePath_NoExt,f'_Branch{branchId}_2DMap.csv'))
             np.savetxt(outFilePath, np.fliplr(np.flipud(branch2DMap)), delimiter=",",fmt='%1.3f')
 
