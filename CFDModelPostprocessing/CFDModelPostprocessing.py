@@ -871,13 +871,15 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         centerlineSplitPolyData = ClipBranchesLogic.computeCenterlineBranches(centerlineAttributesPolyData)
         
         # to node
-        newCenterlineNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLModelNode', 'CenterlineForMap')
+        newCenterlineNode = self._parameterNode.GetNodeReference("CenterlineForMap")
+        if not newCenterlineNode:
+            newCenterlineNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLModelNode', 'CenterlineForMap')
+            self._parameterNode.SetNodeReferenceID("CenterlineForMap",newCenterlineNode.GetID())
         newCenterlineNode.SetAndObserveMesh(centerlineSplitPolyData)  
         if not newCenterlineNode.GetDisplayNode():
             newCenterlineNode.CreateDefaultDisplayNodes()   
         newCenterlineNode.GetDisplayNode().SetVisibility(1) 
 
-        
         # compute bifurcation reference system along the centerline
         bifurcationRefSysPolyData = self.logic.computeBifurcationReferenceSystems(centerlineSplitPolyData)
         
@@ -957,7 +959,9 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
             # store patched data in volumenode
             vol2DName = f'Branch{branchId}_2DPatchedModel'
-            surface2DPatchingNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLScalarVolumeNode', vol2DName)
+            surface2DPatchingNode = self._parameterNode.GetNodeReference(vol2DName)
+            if not surface2DPatchingNode:
+                surface2DPatchingNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLScalarVolumeNode', vol2DName)
             surface2DPatchingNode.SetAndObserveImageData(surfaceBranchPatchedPolyData);
             # save node to parameter node
             self._parameterNode.SetNodeReferenceID(vol2DName,surface2DPatchingNode.GetID())
