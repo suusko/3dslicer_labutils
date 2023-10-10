@@ -316,7 +316,7 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
             if ROIBoxNode:
                 ROIBoxNode.SetDisplayVisibility(0)
 
-        if self._parameterNode.GetNodeReference("SurfaceMappingModel"):
+        if self._parameterNode.GetNodeReference("SurfacePatchingModel"):
             self.ui.scalarSelectionComboBox.enabled = True
             self.updateScalarSelectionComboBox()
             # set the layout
@@ -411,7 +411,7 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
     def updateScalarSelectionComboBox(self):
         # update the scalar selection combobox with the available scalars
         print("updateScalarSelectionComboBox")
-        surfaceNode = self._parameterNode.GetNodeReference("SurfaceMappingModel")
+        surfaceNode = self._parameterNode.GetNodeReference("SurfacePatchingModel")
         #get the selected scalar, if present, before filling the combobox as this will overwrite the selected scalar to the first in the list
         selectedScalar = self._parameterNode.GetParameter("SelectedScalarForMapping")
 
@@ -425,13 +425,14 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
             pointScalarList = []
             for i in range(nPointDataScalars):
                 pointScalarList.append(surfaceNode.GetPolyData().GetPointData().GetArrayName(i))
-        
+              
             # get celldata scalars
             nCellDataScalars = surfaceNode.GetPolyData().GetCellData().GetNumberOfArrays()
             cellScalarList = []
             for i in range(nCellDataScalars):
-                cellScalarList.append(surfaceNode.GetPolyData().GetCellData().GetArrayName(i))
-
+                arrayName = surfaceNode.GetPolyData().GetCellData().GetArrayName(i)
+                cellScalarList.append(f'{arrayName} (patched)')
+            
             # clear combobox
             self.ui.scalarSelectionComboBox.clear()
 
@@ -890,11 +891,25 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         surfaceMappingPolyData = self.logic.computeBranchMapping(surfaceMetricsPolyData,centerlineSplitPolyData,bifurcationRefSysPolyData)
         
         # To node for display
-        surfaceMappingNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLModelNode', 'WSSModelMappingNode')
+        surfaceMappingNode = self._parameterNode.GetNodeReference("SurfaceMappingModel")
+        if not surfaceMappingNode:
+            surfaceMappingNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLModelNode', 'WSSModelMappingNode')
         surfaceMappingNode.SetAndObserveMesh(surfaceMappingPolyData)  
         if not surfaceMappingNode.GetDisplayNode():
-            surfaceMappingNode.CreateDefaultDisplayNodes()     
+            surfaceMappingNode.CreateDefaultDisplayNodes()  
         
+        # patching of surface mesh for the whole geometry
+        (surfacePatchingPolyData,surfacePatched2DPolyData) = self.logic.computeBranchPatching(surfaceMappingPolyData,longitudinalPatchSize,circularNumberOfPatches)
+
+        # to node for display
+        surfacePatchingNode = self._parameterNode.GetNodeReference("SurfacePatchingModel")
+        if not surfacePatchingNode:
+            surfacePatchingNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLModelNode', 'WSSModelPatchingNode')
+        surfacePatchingNode.SetAndObserveMesh(surfacePatchingPolyData)  
+        if not surfacePatchingNode.GetDisplayNode():
+            surfacePatchingNode.CreateDefaultDisplayNodes()     
+       
+
         # get the group ids of the different branches
         surfWrapper = dsa.WrapDataObject(surfaceMappingPolyData)
         groupIdsArray =  np.unique(surfWrapper.PointData.GetArray("GroupIds"))
@@ -903,6 +918,19 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         
         # create layout
         (view1Node, view2Node) = self.setupMapsLayout()
+
+        # set views for the nodes
+        surfaceMappingNode.GetDisplayNode().AddViewNodeID(view2Node.GetID())
+        surfacePatchingNode.GetDisplayNode().AddViewNodeID(view1Node.GetID())
+        
+        # in the second view, display the angular metric on the mapping node
+        surfaceMappingNode.GetDisplayNode().SetActiveScalar("AngularMetric",vtk.vtkAssignAttribute.POINT_DATA)
+        surfaceMappingNode.GetDisplayNode().SetVisibility(1)
+        surfaceMappingNode.GetDisplayNode().SetOpacity(0.6)  
+        
+        surfaceMappingNode.GetDisplayNode().SetAndObserveColorNodeID("vtkMRMLColorTableNodeFileViridis.txt")
+        colorLegendDisplayNode = slicer.modules.colors.logic().AddDefaultColorLegendDisplayNode(surfaceMappingNode)
+        colorLegendDisplayNode.SetTitleText(surfaceMappingNode.GetDisplayNode().GetActiveScalarName())
 
         # loop over the branches
         # split and analyse the branches separately
@@ -915,15 +943,17 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
             #print(surfaceBranchPatchedPolyData)
             surfaceName = f'Branch{branchId}PatchingModel'
             # to node
-            surfacePatchingNode= slicer.mrmlScene.AddNewNodeByClass('vtkMRMLModelNode', surfaceName)
-            surfacePatchingNode.SetAndObserveMesh(surfaceBranchPatchingPolyData)  
-            if not surfacePatchingNode.GetDisplayNode():
-                surfacePatchingNode.CreateDefaultDisplayNodes()
+            surfaceBranchPatchingNode = self._parameterNode.GetNodeReference(surfaceName)
+            if not surfaceBranchPatchingNode:
+                surfaceBranchPatchingNode= slicer.mrmlScene.AddNewNodeByClass('vtkMRMLModelNode', surfaceName)
+            surfaceBranchPatchingNode.SetAndObserveMesh(surfaceBranchPatchingPolyData)  
+            if not surfaceBranchPatchingNode.GetDisplayNode():
+                surfaceBranchPatchingNode.CreateDefaultDisplayNodes()
             # set the viewnode ID for the view to display this node in
-            surfacePatchingNode.GetDisplayNode().AddViewNodeID(view1Node.GetID())
-            surfacePatchingNode.GetDisplayNode().SetVisibility(1) 
+            surfaceBranchPatchingNode.GetDisplayNode().AddViewNodeID(view1Node.GetID())
+            surfaceBranchPatchingNode.GetDisplayNode().SetVisibility(0)  # hide the node
             # save node to parameter node
-            self._parameterNode.SetNodeReferenceID(surfaceName,surfacePatchingNode.GetID())
+            self._parameterNode.SetNodeReferenceID(surfaceName,surfaceBranchPatchingNode.GetID())
 
             # store patched data in volumenode
             vol2DName = f'Branch{branchId}_2DPatchedModel'
@@ -932,17 +962,11 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
             # save node to parameter node
             self._parameterNode.SetNodeReferenceID(vol2DName,surface2DPatchingNode.GetID())
 
-        # in the second view, display the angular metric on the mapping node
-        surfaceMappingNode.GetDisplayNode().SetActiveScalar("AngularMetric",vtk.vtkAssignAttribute.POINT_DATA)
-        surfaceMappingNode.GetDisplayNode().SetVisibility(1)
-        surfaceMappingNode.GetDisplayNode().SetOpacity(0.6)  
-        surfaceMappingNode.GetDisplayNode().AddViewNodeID(view2Node.GetID())
-        surfaceMappingNode.GetDisplayNode().SetAndObserveColorNodeID("vtkMRMLColorTableNodeFileViridis.txt")
-        colorLegendDisplayNode = slicer.modules.colors.logic().AddDefaultColorLegendDisplayNode(surfaceMappingNode)
-        colorLegendDisplayNode.SetTitleText(surfaceMappingNode.GetDisplayNode().GetActiveScalarName())
+
         # save to parameter node (save this node last as it is used to update the GUI, which requires the 2D map computations for the branches to 
         # be saved to the parameter node already)
         self._parameterNode.SetNodeReferenceID("SurfaceMappingModel",surfaceMappingNode.GetID())
+        self._parameterNode.SetNodeReferenceID("SurfacePatchingModel",surfacePatchingNode.GetID())
 
         # display endpoints node in view2
         endPointsNode.GetDisplayNode().AddViewNodeID(view2Node.GetID())        
@@ -1025,39 +1049,75 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         # save to parameter node
         self._parameterNode.SetParameter("SelectedScalarForMapping",scalarName)
         print("onScalarSelected")
-        print(scalarName)
+        #print(scalarName)
         groupIdsArray = [int(s) for s in self._parameterNode.GetParameter("BranchIds").split(' ')]
+
+        # display the selected scalar on the 3D geometry
+        surfacePatchingNode = self._parameterNode.GetNodeReference("SurfacePatchingModel")
+        # check whether regular or patched scalar was selected
+        if scalarName.endswith(' (patched)'):
+            # use the patched (i.e. celldata) variable
+            activeScalar = scalarName.replace(' (patched)', "") # remove the (patched) substring
+            surfacePatchingNode.GetDisplayNode().SetActiveScalar(activeScalar,vtk.vtkAssignAttribute.CELL_DATA)
+        else:
+            activeScalar = scalarName
+            # the regular/original (i.e. pointdata) scalar was selected
+            surfacePatchingNode.GetDisplayNode().SetActiveScalar(activeScalar,vtk.vtkAssignAttribute.POINT_DATA)
+        surfacePatchingNode.GetDisplayNode().SetAndObserveColorNodeID("vtkMRMLColorTableNodeFileViridis.txt")
+        surfacePatchingNode.GetDisplayNode().ScalarVisibilityOn()
+        colorLegendDisplayNode = slicer.modules.colors.logic().AddDefaultColorLegendDisplayNode(surfacePatchingNode)
+        colorLegendDisplayNode.SetTitleText(surfacePatchingNode.GetDisplayNode().GetActiveScalarName())
+
+        # display the 2D maps per branch
         for i,branchId in enumerate(groupIdsArray):
-            surfaceName = f'Branch{branchId}PatchingModel'
+            #surfaceName = f'Branch{branchId}PatchingModel'
             
-            print(surfaceName)
-            surfacePatchingNode = self._parameterNode.GetNodeReference(surfaceName)
-            surfacePatchingNode.GetDisplayNode().SetActiveScalar(scalarName,vtk.vtkAssignAttribute.CELL_DATA)
-            surfacePatchingNode.GetDisplayNode().SetAndObserveColorNodeID("vtkMRMLColorTableNodeFileViridis.txt")
-            surfacePatchingNode.GetDisplayNode().ScalarVisibilityOn()
+            #print(surfaceName)
+            print(branchId)
+            print(activeScalar)
+            #surfacePatchingNode = self._parameterNode.GetNodeReference(surfaceName)
+            #surfacePatchingNode.GetDisplayNode().SetActiveScalar(scalarName,vtk.vtkAssignAttribute.CELL_DATA)
+            #surfacePatchingNode.GetDisplayNode().SetAndObserveColorNodeID("vtkMRMLColorTableNodeFileViridis.txt")
+            #surfacePatchingNode.GetDisplayNode().ScalarVisibilityOn()
 
             vol2DName = f'Branch{branchId}_2DPatchedModel'
             surface2DPatchedNode = self._parameterNode.GetNodeReference(vol2DName)
             # get out the imagedata
             imgdata = surface2DPatchedNode.GetImageData()
-            # create 2D map    
-            branch2DMap= self.logic.extractVariableMap(imgdata,scalarName)
+            # create 2D map of selected scalar
+            branch2DMap= self.logic.extractVariableMap(imgdata,activeScalar)
             
+            # store to node
             map2DName = f'Branch{branchId}_2D_Map'
-            map2DNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode",map2DName)
-            # to parameter node
-            self._parameterNode.SetNodeReferenceID(map2DName,map2DNode.GetID())
+            map2DNode = self._parameterNode.GetNodeReference(map2DName)
+            if not map2DNode:
+                map2DNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode",map2DName)
+                # to parameter node
+                self._parameterNode.SetNodeReferenceID(map2DName,map2DNode.GetID())
             # show 2D color map
             slicer.util.updateVolumeFromArray(map2DNode, branch2DMap)
+            
+            viewNode = slicer.util.getNode(f"SliceView{i+1}").GetID()
             slicer.app.layoutManager().sliceWidget(f"SliceView{i+1}").sliceLogic().GetSliceCompositeNode().SetForegroundVolumeID(map2DNode.GetID())  # setvolume node as the foreground volume of the SliceView1 slice widget.
-            map2DNode.GetDisplayNode().AddViewNodeID(slicer.util.getNode(f"SliceView{i+1}").GetID())
+            # remove the view node if it is there
+            #map2DNode.GetDisplayNode().RemoveViewNodeID(viewNode)
+            # then add it again to force re-rendering
+            map2DNode.GetDisplayNode().AddViewNodeID(viewNode)
             map2DNode.GetDisplayNode().SetInterpolate(0)
+
+            
             # TODO: add colorbar (does not work as before...)
             map2DNode.GetDisplayNode().SetAndObserveColorNodeID("vtkMRMLColorTableNodeFileViridis.txt")
             slicer.modules.colors.logic().AddDefaultColorLegendDisplayNode(map2DNode)
-            
+
+            # force and update of the view
+            slicer.app.layoutManager().sliceWidget(f"SliceView{i+1}").sliceLogic().GetSliceNode().Modified()
+        # enforce re-rendering of the views
+        #slicer.util.forceRenderAllViews()
+
         # reset slice views
         slicer.util.resetSliceViews()
+
            
     def onSaveMapsButton(self):
         import ScreenCapture
