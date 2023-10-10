@@ -1131,9 +1131,9 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         filePath_NoExt = os.path.splitext(filePath)[0]
 
         # save the complete 3D geometry with mapped data
-        surfaceMappingNode = self._parameterNode.GetNodeReference("SurfaceMappingModel")
-        outFilePath = ''.join((filePath_NoExt,f'_Mapping.vtp'))
-        slicer.util.saveNode(surfaceMappingNode,  outFilePath)
+        surfacePatchingNode = self._parameterNode.GetNodeReference("SurfacePatchingModel")
+        outFilePath = ''.join((filePath_NoExt,f'_patching.vtp'))
+        slicer.util.saveNode(surfacePatchingNode,  outFilePath)
             
 
         # ids of branches to save
@@ -1143,19 +1143,20 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
             # save 3D patched surfaces to file 
             surfacePatchingName =  f'Branch{branchId}PatchingModel'
             surfacePatchingModel = self._parameterNode.GetNodeReference(surfacePatchingName)
-            outFilePath = ''.join((filePath_NoExt,f'_Branch{branchId}.vtp'))
+            outFilePath = ''.join((filePath_NoExt,f'_Branch{branchId}_patching.vtp'))
             slicer.util.saveNode(surfacePatchingModel,  outFilePath)
             
             # save results for selected scalar to file
             #save 2D wss maps to .csv, prox at the bottom, dist at the top
+            selectedScalarName = self._parameterNode.GetParameter('SelectedScalarForMapping')
             map2DName = f'Branch{branchId}_2D_Map'
             map2DNode = self._parameterNode.GetNodeReference(map2DName)
             branch2DMap = np.squeeze(slicer.util.arrayFromVolume(map2DNode))
-            outFilePath = ''.join((filePath_NoExt,f'_Branch{branchId}_2DMap.csv'))
+            outFilePath = ''.join((filePath_NoExt,f'_Branch{branchId}_{selectedScalarName}_2DMap.csv'))
             np.savetxt(outFilePath, np.fliplr(np.flipud(branch2DMap)), delimiter=",",fmt='%1.3f')
 
             # save screen captures to file
-            outFilePath = ''.join((filePath_NoExt,f'_Branch{branchId}_2DMap.png'))
+            outFilePath = ''.join((filePath_NoExt,f'_Branch{branchId}_{selectedScalarName}_2DMap.png'))
             view = slicer.app.layoutManager().sliceWidget(f"SliceView{i+1}").sliceView()
             # Capture a screenshot
             cap = ScreenCapture.ScreenCaptureLogic()
