@@ -1074,16 +1074,7 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
         # display the 2D maps per branch
         for i,branchId in enumerate(groupIdsArray):
-            #surfaceName = f'Branch{branchId}PatchingModel'
             
-            #print(surfaceName)
-            print(branchId)
-            print(activeScalar)
-            #surfacePatchingNode = self._parameterNode.GetNodeReference(surfaceName)
-            #surfacePatchingNode.GetDisplayNode().SetActiveScalar(scalarName,vtk.vtkAssignAttribute.CELL_DATA)
-            #surfacePatchingNode.GetDisplayNode().SetAndObserveColorNodeID("vtkMRMLColorTableNodeFileViridis.txt")
-            #surfacePatchingNode.GetDisplayNode().ScalarVisibilityOn()
-
             vol2DName = f'Branch{branchId}_2DPatchedModel'
             surface2DPatchedNode = self._parameterNode.GetNodeReference(vol2DName)
             # get out the imagedata
@@ -1098,26 +1089,35 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
                 map2DNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode",map2DName)
                 # to parameter node
                 self._parameterNode.SetNodeReferenceID(map2DName,map2DNode.GetID())
+                
+        
             # show 2D color map
             slicer.util.updateVolumeFromArray(map2DNode, branch2DMap)
             
             viewNode = slicer.util.getNode(f"SliceView{i+1}").GetID()
             slicer.app.layoutManager().sliceWidget(f"SliceView{i+1}").sliceLogic().GetSliceCompositeNode().SetForegroundVolumeID(map2DNode.GetID())  # setvolume node as the foreground volume of the SliceView1 slice widget.
-            # remove the view node if it is there
-            #map2DNode.GetDisplayNode().RemoveViewNodeID(viewNode)
-            # then add it again to force re-rendering
+            # Add viewnode
             map2DNode.GetDisplayNode().AddViewNodeID(viewNode)
             map2DNode.GetDisplayNode().SetInterpolate(0)
-
+            # get scalar range
             
-            # TODO: add colorbar (does not work as before...)
+            
+
+            # This works from Slicer version 5.4.0 on
             map2DNode.GetDisplayNode().SetAndObserveColorNodeID("vtkMRMLColorTableNodeFileViridis.txt")
-            slicer.modules.colors.logic().AddDefaultColorLegendDisplayNode(map2DNode)
+            cldNode = slicer.modules.colors.logic().AddDefaultColorLegendDisplayNode(map2DNode)
+            cldNode.SetTitleText(activeScalar)
+            # toggle displaynode scalar range for display to force opdate of color legend range
+            map2DNode.GetDisplayNode().SetScalarRangeFlag(0) # manual range
+            map2DNode.GetDisplayNode().SetScalarRangeFlag(1) # auto/data scalar range
+
 
             # force and update of the view
             slicer.app.layoutManager().sliceWidget(f"SliceView{i+1}").sliceLogic().GetSliceNode().Modified()
+            
+
         # enforce re-rendering of the views
-        #slicer.util.forceRenderAllViews()
+        slicer.util.forceRenderAllViews()
 
         # reset slice views
         slicer.util.resetSliceViews()
