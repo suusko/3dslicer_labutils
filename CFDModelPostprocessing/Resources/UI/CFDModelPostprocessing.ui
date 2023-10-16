@@ -94,25 +94,9 @@
     </widget>
    </item>
    <item>
-    <widget class="qMRMLCollapsibleButton" name="MRMLCollapsibleButton">
-     <property name="text">
-      <string>2. Display model surface</string>
-     </property>
-     <layout class="QVBoxLayout" name="verticalLayout_2">
-      <item>
-       <widget class="qMRMLScalarsDisplayWidget" name="surfaceVariablesDisplayWidget">
-        <property name="enabled">
-         <bool>false</bool>
-        </property>
-       </widget>
-      </item>
-     </layout>
-    </widget>
-   </item>
-   <item>
     <widget class="ctkCollapsibleButton" name="computeCenterlinesCollapsibleButton">
      <property name="text">
-      <string>3. Compute centerline</string>
+      <string>2. Compute centerline</string>
      </property>
      <layout class="QFormLayout" name="formLayout">
       <item row="0" column="0">
@@ -192,7 +176,7 @@
    <item>
     <widget class="ctkCollapsibleButton" name="CollapsibleButton">
      <property name="text">
-      <string>4. Remove flow extensions / clip to ROI</string>
+      <string>3. Remove flow extensions / clip to ROI</string>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_3">
       <item>
@@ -242,7 +226,7 @@
       <item>
        <widget class="ctkCollapsibleButton" name="compute2DMapsCollapsibleButton">
         <property name="text">
-         <string>5. Compute 2D maps</string>
+         <string>4. Compute 2D maps</string>
         </property>
         <layout class="QFormLayout" name="formLayout_3">
          <item row="0" column="0">
@@ -422,20 +406,9 @@
    <header>ctkPushButton.h</header>
   </customwidget>
   <customwidget>
-   <class>qMRMLCollapsibleButton</class>
-   <extends>ctkCollapsibleButton</extends>
-   <header>qMRMLCollapsibleButton.h</header>
-   <container>1</container>
-  </customwidget>
-  <customwidget>
    <class>qMRMLNodeComboBox</class>
    <extends>QWidget</extends>
    <header>qMRMLNodeComboBox.h</header>
-  </customwidget>
-  <customwidget>
-   <class>qMRMLScalarsDisplayWidget</class>
-   <extends>qMRMLWidget</extends>
-   <header>qMRMLScalarsDisplayWidget.h</header>
   </customwidget>
   <customwidget>
    <class>qMRMLWidget</class>
@@ -502,22 +475,6 @@
     <hint type="destinationlabel">
      <x>373</x>
      <y>429</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
-   <sender>CFDModelPostprocessing</sender>
-   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
-   <receiver>surfaceVariablesDisplayWidget</receiver>
-   <slot>setMRMLScene(vtkMRMLScene*)</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>281</x>
-     <y>286</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>281</x>
-     <y>313</y>
     </hint>
    </hints>
   </connection>

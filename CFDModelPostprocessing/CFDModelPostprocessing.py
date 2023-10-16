@@ -227,19 +227,6 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
             # set visibility
             surfaceNode.GetDisplayNode().SetVisibility(1) 
 
-            # display scalars
-            surfaceNode.GetDisplayNode().ScalarVisibilityOn()
-            # first scalar in list as active scalar
-            firstScalarName = surfaceNode.GetPolyData().GetPointData().GetArrayName(0)
-            surfaceNode.GetDisplayNode().SetActiveScalar(firstScalarName,vtk.vtkAssignAttribute.POINT_DATA)
-            # set and display color legend
-            surfaceNode.GetDisplayNode().SetAndObserveColorNodeID("vtkMRMLColorTableNodeFileViridis.txt")
-            slicer.modules.colors.logic().AddDefaultColorLegendDisplayNode(surfaceNode)
-                
-            # set in display widget
-            self.ui.surfaceVariablesDisplayWidget.enabled = True
-            self.ui.surfaceVariablesDisplayWidget.setMRMLDisplayNode(surfaceNode.GetDisplayNode())      
-
             # enable centerline computation
             self.ui.endPointsMarkupsSelector.enabled = True
             self.ui.endPointsMarkupsPlaceWidget.enabled = True
@@ -713,6 +700,7 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         return True
 
     def onMouseMoved(self,observer, eventid):
+        print('OnMouseMoved')
         centerlineModelNode = self._parameterNode.GetNodeReference("CenterlineModel")
         crosshairNode = slicer.util.getNode("Crosshair")
         ras=[0,0,0]
@@ -726,7 +714,7 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
 
     def updateROIBox(self, pointIndex):
-        print("updateROIBox")
+        
         openSurfaceLogic = slicer.modules.opensurface.widgetRepresentation().self().logic
 
         # only update the ROI box if the pointIndex has changed
