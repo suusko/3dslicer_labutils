@@ -54,6 +54,7 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self.logic = None
         self._parameterNode = None
         self._updatingGUIFromParameterNode = False
+        
 
     def setup(self):
         """
@@ -69,6 +70,9 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
         # initialize pointslocator, used in the positioning of the ROI box for clipping, to None 
         self.pointsLocator = None
+
+        # intitialize indicator whether ROIbox should be moved or not
+        self.moveROIBox = False
 
         # Set scene in MRML widgets. Make sure that in Qt designer the top-level qMRMLWidget's
         # "mrmlSceneChanged(vtkMRMLScene*)" signal in is connected to each MRML widget's.
@@ -133,7 +137,11 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
             # add observer to move the Roibox
             crosshairNode=slicer.util.getNode("Crosshair")
             self.ROIPlacementObservationId = crosshairNode.AddObserver(slicer.vtkMRMLCrosshairNode.CursorPositionModifiedEvent, self.onMouseMoved)
-
+            # add observer for key presses
+            interactor = slicer.app.layoutManager().threeDWidget(0).threeDView().interactor()
+            self.keyPressObservationId = interactor.AddObserver(vtk.vtkCommand.KeyPressEvent, self.processEvent)
+            # add observer for key releases
+            self.keyReleaseObservationId = interactor.AddObserver(vtk.vtkCommand.KeyReleaseEvent, self.processEvent)
     def exit(self):
         """
         Called each time the user opens a different module.
@@ -144,9 +152,13 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         ROIBoxNode = self._parameterNode.GetNodeReference("OpenSurface_ROIBox")
         if ROIBoxNode:
             ROIBoxNode.SetDisplayVisibility(0)
-            # remove observer
+            # remove observers
             crosshairNode=slicer.util.getNode("Crosshair")
             crosshairNode.RemoveObserver(self.ROIPlacementObservationId)
+            interactor = slicer.app.layoutManager().threeDWidget(0).threeDView().interactor()
+            interactor.RemoveObserver(self.keyPressObservationId)
+            interactor.RemoveObserver(self.keyReleaseObservationId)
+          
 
     def onSceneStartClose(self, caller, event):
         """
@@ -233,10 +245,8 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
             self.ui.autoDetectEndPointsButton.enabled = True
             self.ui.computeCenterlineButton.enabled = True
 
-            # Center view
-            threeDView=slicer.app.layoutManager().threeDWidget(0).threeDView()
             # center 3Dview on the scene
-            threeDView.resetFocalPoint()
+            slicer.app.layoutManager().threeDWidget(0).threeDView().resetFocalPoint()
             # hide bounding box
             viewNode = slicer.app.layoutManager().threeDWidget(0).mrmlViewNode()
             viewNode.SetBoxVisible(0)
@@ -274,6 +284,7 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         if self._parameterNode.GetNodeReference("OpenSurface_ROIBox"):
             # enable clipping button
             self.ui.applyClipButton.enabled = True
+            
         if self._parameterNode.GetNodeReference("ROISurfaceModel"):
             # enable reset button
             self.ui.resetClipButton.enabled = True
@@ -689,9 +700,17 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
             slicer.mrmlScene.RemoveNode(planeNode)
             slicer.mrmlScene.RemoveNode(planeROINode)
 
-            # setup crosshair to get position on centerline model. Position can be selected by moving the mouse while holding the shift key. Code based on script repository
+            # setup crosshair to get position on centerline model. Position can be selected by moving the mouse while holding down the shift key (only Slicer 5.2.2 and below). 
+            # Code based on script repository
             crosshairNode=slicer.util.getNode("Crosshair")
             self.ROIPlacementObservationId = crosshairNode.AddObserver(slicer.vtkMRMLCrosshairNode.CursorPositionModifiedEvent, self.onMouseMoved)
+
+            # add observer for key presses
+            interactor = slicer.app.layoutManager().threeDWidget(0).threeDView().interactor()
+            self.keyPressObservationId = interactor.AddObserver(vtk.vtkCommand.KeyPressEvent, self.processEvent)
+            # add observer for key releases
+            self.keyReleaseObservationId = interactor.AddObserver(vtk.vtkCommand.KeyReleaseEvent, self.processEvent)
+
 
         except Exception as e:
             slicer.util.errorDisplay("Failed create ROI Box. Please make sure a centerline model is selected. Error: "+str(e))
@@ -699,8 +718,16 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
         return True
 
+    def processEvent(self,caller=None,event=None):
+        interactor = slicer.app.layoutManager().threeDWidget(0).threeDView().interactor()
+        if event == "KeyPressEvent":
+            key = interactor.GetKeySym()
+            if key.lower() == 'r':
+                self.moveROIBox = True
+        if event == "KeyReleaseEvent":
+            self.moveROIBox = False
+
     def onMouseMoved(self,observer, eventid):
-        print('OnMouseMoved')
         centerlineModelNode = self._parameterNode.GetNodeReference("CenterlineModel")
         crosshairNode = slicer.util.getNode("Crosshair")
         ras=[0,0,0]
@@ -708,13 +735,12 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         closestPointId = self.pointsLocator.FindClosestPoint(ras)
         ras = centerlineModelNode.GetPolyData().GetPoint(closestPointId)
 
-        #print(f"RAS={ras}")
-        # redraw ROIbox for clipping
-        self.updateROIBox(closestPointId)
+        if self.moveROIBox:
+            # redraw ROIbox for clipping
+            self.updateROIBox(closestPointId)
 
 
     def updateROIBox(self, pointIndex):
-        
         openSurfaceLogic = slicer.modules.opensurface.widgetRepresentation().self().logic
 
         # only update the ROI box if the pointIndex has changed
