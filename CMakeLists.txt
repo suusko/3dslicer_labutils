@@ -23,6 +23,7 @@ add_subdirectory(ClipBranches)
 add_subdirectory(OpenSurface)
 add_subdirectory(AddFlowExtension)
 add_subdirectory(PrepareModelForCFD)
+add_subdirectory(CFDModelPostprocessing)
 ## NEXT_MODULE
 
 #-----------------------------------------------------------------------------
