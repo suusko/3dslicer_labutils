@@ -69,6 +69,9 @@ class OpenSurfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # initialize pointslocator, used in the positioning of the ROI box for clipping, to None 
     self.pointsLocator = None
 
+    # intitialize indicator whether ROIbox should be moved or not
+    self.moveROIBox = False
+
     # Set scene in MRML widgets. Make sure that in Qt designer the top-level qMRMLWidget's
     # "mrmlSceneChanged(vtkMRMLScene*)" signal in is connected to each MRML widget's.
     # "setMRMLScene(vtkMRMLScene*)" slot.
@@ -121,7 +124,11 @@ class OpenSurfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       # add observer to move the Roibox
       crosshairNode=slicer.util.getNode("Crosshair")
       self.ROIPlacementObservationId = crosshairNode.AddObserver(slicer.vtkMRMLCrosshairNode.CursorPositionModifiedEvent, self.onMouseMoved)
-   
+      # add observer for key presses
+      interactor = slicer.app.layoutManager().threeDWidget(0).threeDView().interactor()
+      self.keyPressObservationId = interactor.AddObserver(vtk.vtkCommand.KeyPressEvent, self.processEvent)
+      # add observer for key releases
+      self.keyReleaseObservationId = interactor.AddObserver(vtk.vtkCommand.KeyReleaseEvent, self.processEvent)
 
   def exit(self):
     """
@@ -136,6 +143,9 @@ class OpenSurfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       # remove observer
       crosshairNode=slicer.util.getNode("Crosshair")
       crosshairNode.RemoveObserver(self.ROIPlacementObservationId)
+      interactor = slicer.app.layoutManager().threeDWidget(0).threeDView().interactor()
+      interactor.RemoveObserver(self.keyPressObservationId)
+      interactor.RemoveObserver(self.keyReleaseObservationId)
 
   def onSceneStartClose(self, caller, event):
     """
@@ -292,12 +302,28 @@ class OpenSurfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       crosshairNode=slicer.util.getNode("Crosshair")
       self.ROIPlacementObservationId = crosshairNode.AddObserver(slicer.vtkMRMLCrosshairNode.CursorPositionModifiedEvent, self.onMouseMoved)
    
+      # add observer for key presses
+      interactor = slicer.app.layoutManager().threeDWidget(0).threeDView().interactor()
+      self.keyPressObservationId = interactor.AddObserver(vtk.vtkCommand.KeyPressEvent, self.processEvent)
+      # add observer for key releases
+      self.keyReleaseObservationId = interactor.AddObserver(vtk.vtkCommand.KeyReleaseEvent, self.processEvent)
+
+
     except Exception as e:
       slicer.util.errorDisplay("Failed create ROI Box. Please make sure a centerline model is selected. Error: "+str(e))
       return False
 
     return True
-    
+
+  def processEvent(self,caller=None,event=None):
+    interactor = slicer.app.layoutManager().threeDWidget(0).threeDView().interactor()
+    if event == "KeyPressEvent":
+      key = interactor.GetKeySym()
+      if key.lower() == 'r':
+        self.moveROIBox = True
+    if event == "KeyReleaseEvent":
+      self.moveROIBox = False 
+
   def onMouseMoved(self,observer, eventid):
     centerlineModelNode = self._parameterNode.GetNodeReference("InputCenterline")
     crosshairNode = slicer.util.getNode("Crosshair")
@@ -306,9 +332,9 @@ class OpenSurfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     closestPointId = self.pointsLocator.FindClosestPoint(ras)
     ras = centerlineModelNode.GetPolyData().GetPoint(closestPointId)
    
-    print(f"RAS={ras}")
-    # redraw ROIbox for clipping
-    self.updateROIBox(closestPointId)   
+    if self.moveROIBox:
+      # redraw ROIbox for clipping
+      self.updateROIBox(closestPointId)   
 
  
   def updateROIBox(self, pointIndex):
