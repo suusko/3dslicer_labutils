@@ -955,7 +955,12 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
             print(branchId)
             surfaceBranchMappingPolyData = self.logic.splitSurface(surfaceMappingPolyData,centerlineSplitPolyData,groupIds=[branchId])
             # patching of surface mesh and attributes
-            (surfaceBranchPatchingPolyData, surfaceBranchPatchedPolyData) = self.logic.computeBranchPatching(surfaceBranchMappingPolyData, longitudinalPatchSize,circularNumberOfPatches)
+            try:
+                (surfaceBranchPatchingPolyData, surfaceBranchPatchedPolyData) = self.logic.computeBranchPatching(surfaceBranchMappingPolyData, longitudinalPatchSize,circularNumberOfPatches)
+            except Exception as e:
+                slicer.util.errorDisplay(f"Failed to compute mapping for branch {branchId}. Error: {str(e)}. Continuing with next branch")
+                continue    
+        
             #print(surfaceBranchPatchedPolyData)
             surfaceName = f'Branch{branchId}PatchingModel'
             # to node
