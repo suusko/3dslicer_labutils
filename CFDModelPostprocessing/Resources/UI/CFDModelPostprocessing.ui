@@ -182,7 +182,7 @@
       <item>
        <widget class="QLabel" name="label_3">
         <property name="text">
-         <string>Move ROI box by moving mouse while holding down the SHIFT key in the 3D view. when ready to clip press Apply. Reset Clip resets the clipped model to the input model.</string>
+         <string>Move ROI box by moving mouse while holding down the 'r' key in the 3D view. when ready to clip press Apply. Reset Clip resets the clipped model to the input model.</string>
         </property>
         <property name="wordWrap">
          <bool>true</bool>
