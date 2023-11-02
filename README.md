@@ -8,4 +8,8 @@ The modules are:
 - PrepareModelForCFD: module containing the various steps to prepare a geometry for meshing (load, compute centerline, open model surface, add flow extensions, save )
 - CFDModelPostProcessing: module containing the various steps to postprocess files containing CFD results (e.g. *.tec, *_tec.dat, *.vtp format): display results, remove flow extensions, clip surface to ROI, compute 2D maps and save results to file
 
-This extension works best for Slicer 5.4.0 and above
+## dependencies and packages
+This extension works best for Slicer 5.4.0 and above.
+
+The module requires the following extensions to be installed in Slicer: 
+*SlicerVMTK
