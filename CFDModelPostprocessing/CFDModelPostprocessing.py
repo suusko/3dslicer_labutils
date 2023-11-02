@@ -933,7 +933,7 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self._parameterNode.SetParameter("BranchIds",' '.join([str(x) for x in groupIdsArray] ))
         
         # create layout
-        (view1Node, view2Node) = self.setupMapsLayout()
+        (view1Node, view2Node, view3Node) = self.setupMapsLayout()
 
         # set views for the nodes
         surfaceMappingNode.GetDisplayNode().AddViewNodeID(view2Node.GetID())
@@ -944,10 +944,20 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         surfaceMappingNode.GetDisplayNode().SetVisibility(1)
         surfaceMappingNode.GetDisplayNode().SetOpacity(0.6)  
         
+
         surfaceMappingNode.GetDisplayNode().SetAndObserveColorNodeID("vtkMRMLColorTableNodeFileViridis.txt")
         colorLegendDisplayNode = slicer.modules.colors.logic().AddDefaultColorLegendDisplayNode(surfaceMappingNode)
         colorLegendDisplayNode.SetTitleText(surfaceMappingNode.GetDisplayNode().GetActiveScalarName())
 
+        # add a display node for view 3to the mapping node
+        groupIdsDisplayNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLModelDisplayNode')
+        groupIdsDisplayNode.SetAndObserveColorNodeID("vtkMRMLColorTableNodeFileViridis.txt")
+        groupIdsDisplayNode.AddViewNodeID(view3Node.GetID())
+        groupIdsDisplayNode.SetActiveScalar("GroupIds",vtk.vtkAssignAttribute.POINT_DATA)
+        groupIdsDisplayNode.ScalarVisibilityOn()
+        surfaceMappingNode.AddAndObserveDisplayNodeID(groupIdsDisplayNode.GetID())
+        groupIdsDisplayNode.SetVisibility(1)
+       
         # loop over the branches
         # split and analyse the branches separately
         for branchId in groupIdsArray:
@@ -1001,7 +1011,8 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         # reset views
         slicer.app.layoutManager().threeDWidget(0).threeDView().resetFocalPoint()
         slicer.app.layoutManager().threeDWidget(1).threeDView().resetFocalPoint()
-
+        slicer.app.layoutManager().threeDWidget(2).threeDView().resetFocalPoint()
+        
 
     def setupMapsLayout(self):
         # get branch Ids from parameter node
@@ -1017,10 +1028,20 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
               </view>
              </item>
              <item splitSize="300">
+             <layout type="vertical" split="true">
+             <item splitSize="500">
               <view class="vtkMRMLViewNode" singletontag="2">
                <property name="viewlabel" action="default">2</property>
                <property name=\"viewcolor\" action=\"default\">#F34A33</property>"
               </view>
+             </item>
+             <item splitSize="500">
+              <view class="vtkMRMLViewNode" singletontag="3">
+               <property name="viewlabel" action="default">3</property>
+               <property name=\"viewcolor\" action=\"default\">#F34A33</property>"
+              </view>
+             </item>
+             </layout>
              </item>
              <item splitSize="400">
               <layout type="tab">"""
@@ -1054,6 +1075,7 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         # references to view nodes
         view1Node = slicer.util.getNode("View1")
         view2Node = slicer.util.getNode("View2")
+        view3Node = slicer.util.getNode("View3")
         # set the views
         # hide bounding box
         view1Node.SetBoxVisible(0)
@@ -1065,8 +1087,15 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         view2Node.SetAxisLabelsVisible(0)
         # display orientation marker
         view2Node.SetOrientationMarkerType(slicer.vtkMRMLAbstractViewNode.OrientationMarkerTypeCube)
+        # hide bounding box
+        view3Node.SetBoxVisible(0)
+        view3Node.SetAxisLabelsVisible(0)
+        # display orientation marker
+        view3Node.SetOrientationMarkerType(slicer.vtkMRMLAbstractViewNode.OrientationMarkerTypeCube)
 
-        return(view1Node, view2Node)
+
+
+        return(view1Node, view2Node, view3Node)
 
     def onScalarSelected(self,scalarName):
         # save to parameter node
