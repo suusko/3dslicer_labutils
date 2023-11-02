@@ -79,6 +79,9 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         # "setMRMLScene(vtkMRMLScene*)" slot.
         uiWidget.setMRMLScene(slicer.mrmlScene)
        
+        # set colormap for all displays
+        self.wssColormapName = "vtkMRMLColorTableNodeFileDivergingBlueRed.txt"
+
         # Create logic class. Logic implements all computations that should be possible to run
         # in batch mode, without a graphical user interface.
         self.logic = CFDModelPostprocessingLogic()
@@ -1125,7 +1128,7 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
             activeScalar = scalarName
             # the regular/original (i.e. pointdata) scalar was selected
             surfacePatchingNode.GetDisplayNode().SetActiveScalar(activeScalar,vtk.vtkAssignAttribute.POINT_DATA)
-        surfacePatchingNode.GetDisplayNode().SetAndObserveColorNodeID("vtkMRMLColorTableNodeFileViridis.txt")
+        surfacePatchingNode.GetDisplayNode().SetAndObserveColorNodeID(self.wssColormapName)
         surfacePatchingNode.GetDisplayNode().ScalarVisibilityOn()
         colorLegendDisplayNode = slicer.modules.colors.logic().AddDefaultColorLegendDisplayNode(surfacePatchingNode)
         colorLegendDisplayNode.SetTitleText(surfacePatchingNode.GetDisplayNode().GetActiveScalarName())
@@ -1162,7 +1165,7 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
             
 
             # This works from Slicer version 5.4.0 on
-            map2DNode.GetDisplayNode().SetAndObserveColorNodeID("vtkMRMLColorTableNodeFileViridis.txt")
+            map2DNode.GetDisplayNode().SetAndObserveColorNodeID(self.wssColormapName)
             cldNode = slicer.modules.colors.logic().AddDefaultColorLegendDisplayNode(map2DNode)
             cldNode.SetTitleText(activeScalar)
             # toggle displaynode scalar range for display to force opdate of color legend range
