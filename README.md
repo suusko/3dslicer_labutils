@@ -7,3 +7,5 @@ The modules are:
 - OpenSurface: open a geometry normal to the centerline at a location the user selects.
 - PrepareModelForCFD: module containing the various steps to prepare a geometry for meshing (load, compute centerline, open model surface, add flow extensions, save )
 - CFDModelPostProcessing: module containing the various steps to postprocess files containing CFD results (e.g. *.tec, *_tec.dat, *.vtp format): display results, remove flow extensions, clip surface to ROI, compute 2D maps and save results to file
+
+This extension works best for Slicer 5.4.0 and above
