@@ -1008,10 +1008,20 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         # display node in view2
         newCenterlineNode.GetDisplayNode().AddViewNodeID(view2Node.GetID())
 
-        # reset views
-        slicer.app.layoutManager().threeDWidget(0).threeDView().resetFocalPoint()
-        slicer.app.layoutManager().threeDWidget(1).threeDView().resetFocalPoint()
-        slicer.app.layoutManager().threeDWidget(2).threeDView().resetFocalPoint()
+
+        # link the 3DViews
+        view1Node.LinkedControlOn()
+
+        # reset views, rotate to view from anterior
+        threeDView0 =  slicer.app.layoutManager().threeDWidget(0).threeDView()
+        threeDView1 =  slicer.app.layoutManager().threeDWidget(1).threeDView()
+        threeDView2 =  slicer.app.layoutManager().threeDWidget(2).threeDView()
+        threeDView0.rotateToViewAxis(3)
+        threeDView0.resetCamera()
+        threeDView1.rotateToViewAxis(3)
+        threeDView1.resetCamera()
+        threeDView2.rotateToViewAxis(3)
+        threeDView2.resetCamera()
         
 
     def setupMapsLayout(self):
