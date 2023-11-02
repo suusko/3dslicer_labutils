@@ -298,7 +298,8 @@ class OpenSurfaceWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       slicer.mrmlScene.RemoveNode(planeNode)
       slicer.mrmlScene.RemoveNode(planeROINode)
 
-      # setup crosshair to get positionon centerline model. Position can be selected by moving the mouse while holding the shift key. Code based on script repository
+      # setup crosshair to get positionon centerline model. Position can be selected by moving the mouse while holding the shift+'r' key ( slicer<5.4) 
+      # or the 'r'key (>= slicer 5.4). Code based on script repository
       crosshairNode=slicer.util.getNode("Crosshair")
       self.ROIPlacementObservationId = crosshairNode.AddObserver(slicer.vtkMRMLCrosshairNode.CursorPositionModifiedEvent, self.onMouseMoved)
    
