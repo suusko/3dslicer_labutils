@@ -13,7 +13,7 @@ LabUtils extension provides the following modules:
 - CFD pre-processing
     - [AddFlowExtension](Docs/AddFlowExtension.md): add flow extensions at the opened ends of a model geometry of a blood vessel
     - [OpenSurface](Docs/OpenSurface.md): open a geometry normal to the centerline at a location the user selects.
-    - [PrepareModelForCFD](PrepareModelForCFD.md): module containing the workflow to prepare a geometry for meshing (load, compute centerline, open model surface, add flow extensions, save )
+    - [PrepareModelForCFD](Docs/PrepareModelForCFD.md): module containing the workflow to prepare a geometry for meshing (load, compute centerline, open model surface, add flow extensions, save )
 - CFD post-processing
     - [ClipBranches](Docs/ClipBranches.md): divide a surface and clip branches in relation to its split and grouped centerlines. Convenience module based on vmtkbranchclipper
-    - [CFDModelPostProcessing](Docs/CFDModelPostProcessing): module containing the workflow to postprocess files containing CFD results (e.g. *.tec, *_tec.dat, *.vtp format): display results, remove flow extensions, clip surface to ROI, compute 2D maps and save results to file
+    - [CFDModelPostProcessing](Docs/CFDModelPostProcessing.md): module containing the workflow to postprocess files containing CFD results (e.g. *.tec, *_tec.dat, *.vtp format): display results, remove flow extensions, clip surface to ROI, compute 2D maps and save results to file
