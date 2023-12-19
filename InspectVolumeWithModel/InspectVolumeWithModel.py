@@ -270,12 +270,12 @@ class InspectVolumeWithModelLogic(ScriptedLoadableModuleLogic):
         normals.Update()
 
         # write to file
-        outfilepath = 'F:\\Jolanda\\PaulEvans_eNOS\\normals.vtp'
-        writer = vtk.vtkXMLPolyDataWriter()
-        writer.SetDataModeToAscii()
-        writer.SetFileName(outfilepath)
-        writer.SetInputData(normals.GetOutput())
-        writer.Write()
+        #outfilepath = 'F:\\Jolanda\\PaulEvans_eNOS\\normals.vtp'
+        #writer = vtk.vtkXMLPolyDataWriter()
+        #writer.SetDataModeToAscii()
+        #writer.SetFileName(outfilepath)
+        #writer.SetInputData(normals.GetOutput())
+        #writer.Write()
 
 
         # and inverted normals
