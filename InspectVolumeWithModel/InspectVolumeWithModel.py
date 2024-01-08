@@ -203,11 +203,7 @@ class InspectVolumeWithModelWidget(ScriptedLoadableModuleWidget, VTKObservationM
             self.logic.process(self.ui.inputVolumeSelector.currentNode(), self.ui.inputModelSelector.currentNode(),
                                self.ui.profileLengthSpinBox.value, self.ui.outputModelSelector.currentNode())
 
-            # Compute inverted output (if needed)
-            #if self.ui.invertedOutputSelector.currentNode():
-                # If additional output volume is selected then result with inverted threshold is written there
-            #    self.logic.process(self.ui.inputSelector.currentNode(), self.ui.invertedOutputSelector.currentNode(),
-            #                       self.ui.imageThresholdSliderWidget.value, not self.ui.invertOutputCheckBox.checked, showResult=False)
+            
             print('Apply')
 
 
@@ -255,7 +251,7 @@ class InspectVolumeWithModelLogic(ScriptedLoadableModuleLogic):
         # rescale the image to isotropic voxel size (this is assumed by the profile_line function)
         inputSpacing = inputVolume.GetSpacing()
         minSpacing = min(inputSpacing)
-        print(minSpacing)
+        #print(minSpacing)
         isotropicInputVolume = self.resampleVolumeToIsotropicSpacing(inputVolume, minSpacing)
 
         # get surface nodes
@@ -270,12 +266,12 @@ class InspectVolumeWithModelLogic(ScriptedLoadableModuleLogic):
         normals.Update()
 
         # write to file
-        #outfilepath = 'F:\\Jolanda\\PaulEvans_eNOS\\normals.vtp'
-        #writer = vtk.vtkXMLPolyDataWriter()
-        #writer.SetDataModeToAscii()
-        #writer.SetFileName(outfilepath)
-        #writer.SetInputData(normals.GetOutput())
-        #writer.Write()
+        # outfilepath = ''
+        # writer = vtk.vtkXMLPolyDataWriter()
+        # writer.SetDataModeToAscii()
+        # writer.SetFileName(outfilepath)
+        # writer.SetInputData(normals.GetOutput())
+        # writer.Write()
 
 
         # and inverted normals
@@ -287,7 +283,13 @@ class InspectVolumeWithModelLogic(ScriptedLoadableModuleLogic):
         normalsFlip.AutoOrientNormalsOn()
         normalsFlip.Update()
 
-       
+        # write to file
+        #outfilepath = ''
+        #writer = vtk.vtkXMLPolyDataWriter()
+        #writer.SetDataModeToAscii()
+        #writer.SetFileName(outfilepath)
+        #writer.SetInputData(normalsFlip.GetOutput())
+        #writer.Write()
 
         # to array
         normalsData = dsa.WrapDataObject(normals.GetOutput()).PointData['Normals']
@@ -300,8 +302,8 @@ class InspectVolumeWithModelLogic(ScriptedLoadableModuleLogic):
         rasToIjkMatrix = slicer.util.arrayFromVTKMatrix(volumeRasToIjk)
         surfacePointsIjk = self.worldToVox(surfacePoints, rasToIjkMatrix)
         
-        print(surfacePoints[500,:])
-        print(surfacePointsIjk[500,:])
+        #print(surfacePoints[1000,:])
+        #print(surfacePointsIjk[1000,:])
 
         # scale normals to defined profile length (in mm)
         scale = (profileLength/1000)/2
@@ -321,16 +323,30 @@ class InspectVolumeWithModelLogic(ScriptedLoadableModuleLogic):
         maxOverProfile = np.zeros((surfacePointsIjk.shape[0]))
         # get volume scalar array
         isotropicInputVolumeArray = slicer.util.arrayFromVolume(isotropicInputVolume)
-        print(isotropicInputVolumeArray.shape)
+        #print(f'volumeArray shape = {isotropicInputVolumeArray.shape}')
         # TODO: progressbar in logic class is perhaps not the best idea?
-        progressbar= slicer.util.createProgressDialog(autoClose=False)
+        progressbar= slicer.util.createProgressDialog(autoClose=True)
         progressbar.labelText = "processing"
         nPoints = len(surfacePointsIjk)
-        for (i, vtx) in enumerate(surfacePointsIjk):
+
+        # need imageArrayIJK
+        isotropicInputVolumeArrayIJK = np.transpose(isotropicInputVolumeArray, axes=[2,1, 0])
+        for (i, vtx) in enumerate(surfacePoints):
             slicer.app.processEvents()
-            lumenProfile = self.lineProfile(isotropicInputVolumeArray[:,:,:],
-                                            vtx+normalsFlipScaledIjk[i,:],
-                                            vtx+normalsScaledIjk[i,:],
+            
+            startPoint =  vtx + normalsFlipScaled[i,:]
+            endPoint = vtx + normalsScaled[i,:]
+            
+            startPointIJK = self.worldToVox(startPoint[np.newaxis,:], rasToIjkMatrix)
+            endPointIJK = self.worldToVox(endPoint[np.newaxis,:], rasToIjkMatrix)
+            
+            #if i==1000:
+              #print(f'linestart = {startPointIJK}')
+              #print(f'lineend = {endPointIJK}')
+
+            lumenProfile = self.lineProfile(isotropicInputVolumeArrayIJK[:,:,:],
+                                            startPointIJK.flatten(),
+                                            endPointIJK.flatten(),
                                             spacing=0.1,
                                             order=0)
             meanOverProfile[i] = np.nanmean(lumenProfile)
@@ -339,6 +355,7 @@ class InspectVolumeWithModelLogic(ScriptedLoadableModuleLogic):
             #update progress bar
             progressbar.value = ((i+1)/nPoints)*100
         
+       
         # append to the surface model
         surfaceWrapper = dsa.WrapDataObject(inputModel.GetPolyData())
         surfaceWrapper.PointData.append(meanOverProfile, 'profileMean')
@@ -391,12 +408,11 @@ class InspectVolumeWithModelLogic(ScriptedLoadableModuleLogic):
         slicer.mrmlScene.RemoveNode(cliNode)
         return outputVolume
 
-    def lineProfile(self, imageArrayKJI, startCoords, endCoords, spacing=1, order=0, endPoint=True):
+    def lineProfile(self, imageArrayIJK, startCoords, endCoords, spacing=1, order=0, endPoint=True):
         # https://stackoverflow.com/questions/55651307/how-to-extract-line-profile-ray-trace-line-through-3d-matrix-ndarray-3-dim-b
         
-        # need imageArrayIJK
-        imageArrayIJK = np.transpose(imageArrayKJI, axes=[2,1, 0])
-        print(imageArrayIJK.shape)
+        
+        #print(imageArrayIJK.shape)
         coords = []
         n_points = int(np.ceil(spatial.distance.euclidean(startCoords, endCoords)/ spacing))
         for s, e in zip(startCoords, endCoords):
