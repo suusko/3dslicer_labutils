@@ -365,7 +365,11 @@ class InspectVolumeWithModelLogic(ScriptedLoadableModuleLogic):
                 prefix = f'{scalarPrefix}_'
             else:
                 prefix = ""
-        surfaceWrapper = dsa.WrapDataObject(inputModel.GetPolyData())
+        # get the polydata from the input model
+        inputModelPolyData = inputModel.GetPolyData()
+        copyPolyData = vtk.vtkPolyData()
+        copyPolyData.DeepCopy(inputModelPolyData)     
+        surfaceWrapper = dsa.WrapDataObject(copyPolyData)
         surfaceWrapper.PointData.append(meanOverProfile, f'{prefix}profileMean')
         surfaceWrapper.PointData.append(maxOverProfile, f'{prefix}profileMax')
         # set to model
