@@ -56,11 +56,13 @@ class InspectVolumeWithModelParameterNode:
     inputModel - the model to inspect the volume with
     profileLength - the length of the profile used to probe the volume normal to the input model surface
     outputModel - the model with an added array that contains the representative values of the volume at the model surface
+    scalarPrefix - a string to prepend to the scalar name of the output data (to avoid overwriting the scalar name if it already exists from a previous run of the module)
     """
     inputVolume: vtkMRMLScalarVolumeNode
     inputModel: vtkMRMLModelNode
     profileLength: Annotated[int, WithinRange(0, 400)] = 180
     outputModel: vtkMRMLModelNode
+    scalarPrefix: str
 
 
 #
@@ -201,7 +203,7 @@ class InspectVolumeWithModelWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
             # Compute output
             self.logic.process(self.ui.inputVolumeSelector.currentNode(), self.ui.inputModelSelector.currentNode(),
-                               self.ui.profileLengthSpinBox.value, self.ui.outputModelSelector.currentNode())
+                               self.ui.profileLengthSpinBox.value, self.ui.outputModelSelector.currentNode(),self.ui.scalarPrefixLineEdit.text)
 
             
             print('Apply')
@@ -234,13 +236,15 @@ class InspectVolumeWithModelLogic(ScriptedLoadableModuleLogic):
                 inputVolume: vtkMRMLScalarVolumeNode,
                 inputModel: vtkMRMLModelNode,
                 profileLength: int,
-                outputModel: vtkMRMLModelNode) -> None:
+                outputModel: vtkMRMLModelNode,
+                scalarPrefix: str) -> None:
         """
         Run the processing algorithm.
         Can be used without GUI widget.
         :param inputVolume: volume to be inspected with model
         :param inputModel: surfacemodel to use to inspect volume
         :param profileLength: length of the profiles to inspect the volume with normal to the input surface model (in micrometer)
+        :param scalarPrefix: string to be prepended to the name of the computed scalar output 
         """
 
         from vtk.numpy_interface import dataset_adapter as dsa
@@ -357,9 +361,13 @@ class InspectVolumeWithModelLogic(ScriptedLoadableModuleLogic):
         
        
         # append to the surface model
+            if scalarPrefix:
+                prefix = f'{scalarPrefix}_'
+            else:
+                prefix = ""
         surfaceWrapper = dsa.WrapDataObject(inputModel.GetPolyData())
-        surfaceWrapper.PointData.append(meanOverProfile, 'profileMean')
-        surfaceWrapper.PointData.append(maxOverProfile, 'profileMax')
+        surfaceWrapper.PointData.append(meanOverProfile, f'{prefix}profileMean')
+        surfaceWrapper.PointData.append(maxOverProfile, f'{prefix}profileMax')
         # set to model
         outputModel.SetAndObserveMesh(surfaceWrapper.VTKObject)  
         return
