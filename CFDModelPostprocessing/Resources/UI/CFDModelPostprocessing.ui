@@ -282,14 +282,14 @@
            </property>
           </widget>
          </item>
-         <item row="4" column="0">
+         <item row="7" column="0">
           <widget class="QLabel" name="label_4">
            <property name="text">
             <string>Longitudinal bin length (mm):</string>
            </property>
           </widget>
          </item>
-         <item row="4" column="1">
+         <item row="7" column="1">
           <widget class="QDoubleSpinBox" name="longBinSizeSpinBox">
            <property name="enabled">
             <bool>false</bool>
@@ -305,14 +305,14 @@
            </property>
           </widget>
          </item>
-         <item row="5" column="0">
+         <item row="8" column="0">
           <widget class="QLabel" name="label_5">
            <property name="text">
             <string>no. circumferential bins:</string>
            </property>
           </widget>
          </item>
-         <item row="5" column="1">
+         <item row="8" column="1">
           <widget class="QSpinBox" name="noCircBinSpinBox">
            <property name="enabled">
             <bool>false</bool>
@@ -322,14 +322,14 @@
            </property>
           </widget>
          </item>
-         <item row="9" column="0">
+         <item row="12" column="0">
           <widget class="QLabel" name="label_7">
            <property name="text">
             <string>Scalar for display:</string>
            </property>
           </widget>
          </item>
-         <item row="9" column="1">
+         <item row="12" column="1">
           <widget class="ctkComboBox" name="scalarSelectionComboBox">
            <property name="enabled">
             <bool>false</bool>
@@ -342,7 +342,7 @@
            </property>
           </widget>
          </item>
-         <item row="8" column="1">
+         <item row="11" column="1">
           <widget class="QPushButton" name="computeMapsButton">
            <property name="enabled">
             <bool>false</bool>
@@ -352,13 +352,33 @@
            </property>
           </widget>
          </item>
-         <item row="10" column="1">
+         <item row="13" column="1">
           <widget class="QPushButton" name="saveMapsButton">
            <property name="enabled">
             <bool>false</bool>
            </property>
            <property name="text">
             <string>Save maps</string>
+           </property>
+          </widget>
+         </item>
+         <item row="4" column="1">
+          <widget class="QPushButton" name="computeCenterlineFor2DMapButton">
+           <property name="enabled">
+            <bool>false</bool>
+           </property>
+           <property name="text">
+            <string>Compute centerline</string>
+           </property>
+          </widget>
+         </item>
+         <item row="6" column="0" colspan="2">
+          <widget class="QGroupBox" name="selectIdsFor2DMapGroupBox">
+           <property name="enabled">
+            <bool>false</bool>
+           </property>
+           <property name="title">
+            <string>Select GroupIds to keep:</string>
            </property>
           </widget>
          </item>
