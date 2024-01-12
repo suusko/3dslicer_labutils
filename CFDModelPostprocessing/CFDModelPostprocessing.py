@@ -1099,8 +1099,6 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         surfaceBranchMappingNode.AddAndObserveDisplayNodeID(groupIdsDisplayNode.GetID())
         groupIdsDisplayNode.SetVisibility(1)
        
-
-
         # display endpoints node in view2
         #endPointsNode.GetDisplayNode().AddViewNodeID(view2Node.GetID())        
         #endPointsNode.SetDisplayVisibility(1)
@@ -1547,10 +1545,10 @@ class CFDModelPostprocessingLogic(ScriptedLoadableModuleLogic):
     def extractVariableMap(self,patched2DImage,variableName):
         from vtk.numpy_interface import dataset_adapter as dsa
         imwrapped = dsa.WrapDataObject(patched2DImage)
-        patchVariableData = np.squeeze(imwrapped.PointData.GetArray(variableName).reshape(patched2DImage.GetDimensions(),order='F')).T
-        #patchStretchedMappingData = np.squeeze(imwrapped.PointData.GetArray('StretchedMapping').reshape(surface_patched_2D.GetDimensions(),order='F')).T
-        #patchAngularmetricData = np.squeeze(imwrapped.PointData.GetArray('AngularMetric').reshape(surface_patched_2D.GetDimensions(),order='F')).T
-        
+        patchVariableData = None
+        if patched2DImage.GetPointData().HasArray(variableName):
+            patchVariableData = np.fliplr(np.squeeze(imwrapped.PointData.GetArray(variableName).reshape(patched2DImage.GetDimensions(),order='F')).T)
+       
         return patchVariableData 
     
     def extractCenterlineGroup(self,centerlinePolyData,groupId):
