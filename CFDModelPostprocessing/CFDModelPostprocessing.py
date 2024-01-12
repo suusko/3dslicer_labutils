@@ -1086,17 +1086,16 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         self._parameterNode.SetNodeReferenceID("SurfacePatchingModel",surfacePatchingNode.GetID())
         
         # set views for the nodes
-        surfaceBranchMappingNode.GetDisplayNode().AddViewNodeID(view2Node.GetID())
+        
         #surfacePatchingNode.GetDisplayNode().AddViewNodeID(view1Node.GetID())
         surfaceBranchPatchingNode.GetDisplayNode().AddViewNodeID(view1Node.GetID())
         
         # in the second view, display the angular metric on the mapping node
+        surfaceBranchMappingNode.GetDisplayNode().AddViewNodeID(view2Node.GetID())
         surfaceBranchMappingNode.GetDisplayNode().SetActiveScalar("AngularMetric",vtk.vtkAssignAttribute.POINT_DATA)
         surfaceBranchMappingNode.SetDisplayVisibility(1)
-        
-
         surfaceBranchMappingNode.GetDisplayNode().SetAndObserveColorNodeID("vtkMRMLColorTableNodeFileViridis.txt")
-        colorLegendDisplayNode = slicer.modules.colors.logic().AddDefaultColorLegendDisplayNode(surfaceMappingNode)
+        colorLegendDisplayNode = slicer.modules.colors.logic().AddDefaultColorLegendDisplayNode(surfaceBranchMappingNode)
         colorLegendDisplayNode.SetTitleText(surfaceBranchMappingNode.GetDisplayNode().GetActiveScalarName())
 
         # add a display node for view 3to the mapping node
