@@ -282,8 +282,10 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
             self.ui.longBinSizeSpinBox.enabled = True
             self.ui.noCircBinSpinBox.enabled = True
             self.ui.computeMapsButton.enabled = True
+            self.ui.autoDetectEndPointsROIButton.enabled = True
+            self.ui.computeCenterlineFor2DMapButton.enabled = True
 
-            # hide endpointsnode
+            # hide endpointsnodes
             endPointsNode.GetDisplayNode().SetVisibility(0)
 
         # set clip ROI button state
@@ -316,6 +318,7 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
             if centerlineModel:
                 centerlineModel.GetDisplayNode().SetVisibility(0)
 
+          
             # Hide ROI Box
             ROIBoxNode = self._parameterNode.GetNodeReference("OpenSurface_ROIBox")
             if ROIBoxNode:
@@ -491,8 +494,17 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         endPointsNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointRemovedEvent,self.updateInletRadioButtons)
 
     def onAutoDetectEndPointsROIButton(self):
-
-        surfaceModelNode = self._parameterNode.GetNodeReference("ROISurfaceModel")
+        ROIModelNode = self._parameterNode.GetNodeReference("ROISurfaceModel")
+        if not ROIModelNode:
+            surfaceModelNode = self._parameterNode.GetNodeReference("SurfaceModel")
+            # set the original model as the ROImodel
+            ROIModelNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode",
+                    "open_model")
+            if not ROIModelNode.GetDisplayNode():
+                ROIModelNode.CreateDefaultDisplayNodes()
+            ROIModelNode.SetAndObserveMesh(surfaceModelNode.GetPolyData())  
+            self._parameterNode.SetNodeReferenceID("ROISurfaceModel", ROIModelNode.GetID())
+           
         endPointsNode = self._parameterNode.GetNodeReference("ROIEndPoints")
         if not endPointsNode:
             endPointsNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode",
@@ -500,9 +512,9 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
             endPointsNode.CreateDefaultDisplayNodes()
             self._parameterNode.SetNodeReferenceID("ROIEndPoints", endPointsNode.GetID())
         # Make input surface semi-transparent to make all detected endpoints visible
-        surfaceModelNode.GetDisplayNode().SetOpacity(0.8)
+        ROIModelNode.GetDisplayNode().SetOpacity(0.8)
         
-        self.autoDetectEndPoints(surfaceModelNode,endPointsNode)
+        self.autoDetectEndPoints(ROIModelNode,endPointsNode)
 
         # display endpoint labels
         endPointsNode.SetControlPointLabelFormat("%d")
@@ -849,39 +861,37 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
         from vtk.numpy_interface import dataset_adapter as dsa
 
+        # access logic from other modules
+        ExtractCenterlineLogic = slicer.modules.extractcenterline.widgetRepresentation().self().logic
+        ClipBranchesLogic = slicer.modules.clipbranches.widgetRepresentation().self().logic
+
         # Hide ROI box 
         ROIModelNode = self._parameterNode.GetNodeReference("ROISurfaceModel")
         if ROIModelNode:
             ROIModelNode.SetDisplayVisibility(0)
         
         # get the surface, either the ROI surface or the original surface
-        if self._parameterNode.GetNodeReference("ROISurfaceModel"):
+        if ROIModelNode:
             # get the clipped model
-            surfaceModelNode = self._parameterNode.GetNodeReference("ROISurfaceModel")
-            # get the endPoints to recompute the centerline for the ROI model
-            endPointsNode = self._parameterNode.GetNodeReference("ROIEndPoints")
-            if not endPointsNode:
-                slicer.util.errorDisplay("No endpoints detected for clipped surface model. Please make sure to compute endpoints before proceeding")
-                return
-            
-            # compute centerline
-            ExtractCenterlineLogic = slicer.modules.extractcenterline.widgetRepresentation().self().logic
-            ClipBranchesLogic = slicer.modules.clipbranches.widgetRepresentation().self().logic
-
-            # preprocess polydata to improve centerline computation
-            preprocessedPolyData = self.getPreprocessedPolyData(surfaceModelNode)
-            curveSamplingDistance = 1.0 # default
-            centerlinePolyData, _ = ExtractCenterlineLogic.extractCenterline(preprocessedPolyData,endPointsNode,curveSamplingDistance)
-
+            surfaceModelNode = ROIModelNode
         else:
-            # use the original model
+            # use the original model (but recompute the centerline)
             surfaceModelNode = self._parameterNode.GetNodeReference("SurfaceModel")
-            centerlineModelNode = self._parameterNode.GetNodeReference("CenterlineModel")
-            centerlinePolyData = centerlineModelNode.GetPolyData()
-            endPointsNode = self._parameterNode.GetNodeReference("EndPoints")
+            
+        # get the endPoints to recompute the centerline for the ROI model
+        endPointsNode = self._parameterNode.GetNodeReference("ROIEndPoints")
+        if not endPointsNode:
+            slicer.util.errorDisplay("No endpoints detected for clipped surface model. Please make sure to compute endpoints before proceeding")
+            return
+        
+        # compute centerline
+        # preprocess polydata to improve centerline computation
+        preprocessedPolyData = self.getPreprocessedPolyData(surfaceModelNode)
+        curveSamplingDistance = 1.0 # default
+        centerlinePolyData, _ = ExtractCenterlineLogic.extractCenterline(preprocessedPolyData,endPointsNode,curveSamplingDistance)
         
         # hide the models from the previous step
-        surfaceModelNode.GetDisplayNode().SetVisibility(0)
+        surfaceModelNode.SetDisplayVisibility(0)
         endPointsNode.SetDisplayVisibility(0)
 
         # compute centerline attributes (abscissa, angular metric)
@@ -904,7 +914,7 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         newCenterlineNode.SetAndObserveMesh(centerlineOffsetAttrPolyData)  
         if not newCenterlineNode.GetDisplayNode():
             newCenterlineNode.CreateDefaultDisplayNodes()   
-        newCenterlineNode.GetDisplayNode().SetVisibility(1) 
+        newCenterlineNode.SetDisplayVisibility(1) 
 
         # refine surface for mapping and patching (reduces holes in mapped surface)
         surfaceSubdividedPolyData = self.logic.subdivideSurface(surfaceModelNode.GetPolyData()) 
@@ -986,7 +996,6 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         
         from vtk.numpy_interface import dataset_adapter as dsa
 
-        
         # create layout
         (view1Node, view2Node, view3Node) = self.setupMapsLayout()
 
@@ -1004,10 +1013,10 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         surfaceMappingNode =  self._parameterNode.GetNodeReference('SurfaceMappingModel')
 
         # hide the models from the previous step
-        surfaceMappingNode.GetDisplayNode().SetVisibility(0)
-        centerlineNode.GetDisplayNode().SetVisibility(0)
+        surfaceMappingNode.SetDisplayVisibility(0)
+        centerlineNode.SetDisplayVisibility(0)
         groupIdsMarkupsNode = self._parameterNode.GetNodeReference('CenterlineFor2DMapGroupIds')
-        groupIdsMarkupsNode.GetDisplayNode().SetVisibility(0)
+        groupIdsMarkupsNode.SetDisplayVisibility(0)
         # get the patch sizes
         longitudinalPatchSize = float(self._parameterNode.GetParameter("LongitudinalPatchSize"))
         circularNumberOfPatches = int(self._parameterNode.GetParameter("CircularNumberOfPatches"))
@@ -1023,7 +1032,7 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         if not surfacePatchingNode.GetDisplayNode():
             surfacePatchingNode.CreateDefaultDisplayNodes()     
         # hide from view
-        surfacePatchingNode.GetDisplayNode().SetVisibility(0)
+        surfacePatchingNode.SetDisplayVisibility(0)
         # get the group ids of the selected branches
         selectedGroupIdsList= [int(cb.text) for cb in self.groupIdsCheckBoxList if cb.isChecked()]
         # get the group ids of the different branches
@@ -1083,7 +1092,7 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         
         # in the second view, display the angular metric on the mapping node
         surfaceBranchMappingNode.GetDisplayNode().SetActiveScalar("AngularMetric",vtk.vtkAssignAttribute.POINT_DATA)
-        surfaceBranchMappingNode.GetDisplayNode().SetVisibility(1)
+        surfaceBranchMappingNode.SetDisplayVisibility(1)
         
 
         surfaceBranchMappingNode.GetDisplayNode().SetAndObserveColorNodeID("vtkMRMLColorTableNodeFileViridis.txt")
