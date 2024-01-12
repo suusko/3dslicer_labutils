@@ -890,12 +890,18 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         # split centerlines into branches
         centerlineSplitPolyData = ClipBranchesLogic.computeCenterlineBranches(centerlineAttributesPolyData)
         
+        # compute bifurcation reference system along the centerline
+        bifurcationRefSysPolyData = self.logic.computeBifurcationReferenceSystems(centerlineSplitPolyData)
+        
+        # offset centerline attributes to bifurcation ref system
+        centerlineOffsetAttrPolyData = self.logic.computeCenterlineOffsetAttributes(centerlineSplitPolyData,bifurcationRefSysPolyData)
+  
         # to node
         newCenterlineNode = self._parameterNode.GetNodeReference("CenterlineForMap")
         if not newCenterlineNode:
             newCenterlineNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLModelNode', 'CenterlineForMap')
             self._parameterNode.SetNodeReferenceID("CenterlineForMap",newCenterlineNode.GetID())
-        newCenterlineNode.SetAndObserveMesh(centerlineSplitPolyData)  
+        newCenterlineNode.SetAndObserveMesh(centerlineOffsetAttrPolyData)  
         if not newCenterlineNode.GetDisplayNode():
             newCenterlineNode.CreateDefaultDisplayNodes()   
         newCenterlineNode.GetDisplayNode().SetVisibility(1) 
@@ -903,17 +909,14 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         # refine surface for mapping and patching (reduces holes in mapped surface)
         surfaceSubdividedPolyData = self.logic.subdivideSurface(surfaceModelNode.GetPolyData()) 
          
-        # compute bifurcation reference system along the centerline
-        bifurcationRefSysPolyData = self.logic.computeBifurcationReferenceSystems(centerlineSplitPolyData)
-        
         # split the surface into its constituent branches
-        surfaceSplitPolyData = self.logic.splitSurface(surfaceSubdividedPolyData,centerlineSplitPolyData)
+        surfaceSplitPolyData = self.logic.splitSurface(surfaceSubdividedPolyData,centerlineOffsetAttrPolyData)
         
         # compute branch metrics (Abscissametric and Angular metric)
-        surfaceMetricsPolyData = self.logic.computeBranchMetrics(surfaceSplitPolyData, centerlineSplitPolyData)
+        surfaceMetricsPolyData = self.logic.computeBranchMetrics(surfaceSplitPolyData, centerlineOffsetAttrPolyData)
         
         # metrics mapping to branches
-        surfaceMappingPolyData = self.logic.computeBranchMapping(surfaceMetricsPolyData,centerlineSplitPolyData,bifurcationRefSysPolyData)
+        surfaceMappingPolyData = self.logic.computeBranchMapping(surfaceMetricsPolyData,centerlineOffsetAttrPolyData,bifurcationRefSysPolyData)
         
         # To node for display
         surfaceMappingNode = self._parameterNode.GetNodeReference("SurfaceMappingModel")
@@ -931,7 +934,7 @@ class CFDModelPostprocessingWidget(ScriptedLoadableModuleWidget, VTKObservationM
         # display group ids
         # compute centers of the cells for each group Id
         cellCenters = vtk.vtkCellCenters()
-        cellCenters.SetInputData(centerlineSplitPolyData)
+        cellCenters.SetInputData(centerlineOffsetAttrPolyData)
         cellCenters.Update()
         
         wrapper = dsa.WrapDataObject(cellCenters.GetOutput())
@@ -1498,7 +1501,26 @@ class CFDModelPostprocessingLogic(ScriptedLoadableModuleLogic):
         patchingFilter.Update()
 
         return (patchingFilter.GetOutput(), patchingFilter.GetPatchedData())
-        
+
+    def computeCenterlineOffsetAttributes(self,centerlinePolyData,referenceSystems):
+        import vtkvmtkComputationalGeometryPython as vtkvmtkComputationalGeometry
+
+        offsetFilter = vtkvmtkComputationalGeometry.vtkvmtkCenterlineReferenceSystemAttributesOffset()
+        offsetFilter.SetInputData(centerlinePolyData)
+        offsetFilter.SetReferenceSystems(referenceSystems)
+        offsetFilter.SetAbscissasArrayName(self.abscissaArrayName)
+        offsetFilter.SetNormalsArrayName(self.normalsArrayName)
+        offsetFilter.SetOffsetAbscissasArrayName(self.abscissaArrayName)
+        offsetFilter.SetOffsetNormalsArrayName(self.normalsArrayName)
+        offsetFilter.SetGroupIdsArrayName(self.groupIdsArrayName)
+        offsetFilter.SetCenterlineIdsArrayName(self.centerlineIdsArrayName)
+        offsetFilter.SetReferenceSystemsNormalArrayName(self.referenceSystemsNormalArrayName)
+        offsetFilter.SetReferenceSystemsGroupIdsArrayName(self.groupIdsArrayName)
+        offsetFilter.SetReferenceGroupId(-1)
+        offsetFilter.Update()
+
+        return offsetFilter.GetOutput()
+
     def flattenMappedSurface(mappedSurfacePolyData):
         # code based on discussion at http:
     
