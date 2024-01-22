@@ -63,7 +63,7 @@ You can move the box along the centerline by pressing 'r' and moving the mouse i
 You can also position and/or resize the box manually using the colored dots (e.g. extend it in one direction to cover the inlet/outlet, drag the blue/green/red dots to resize the box). Note that if you want to manually rotate the box, you need to display the rotation handle. To do this, hover over one of the points of the box with the mouse, then right mouseclick to open the menu. Under 'Interaction options', check 'Rotate' to display a rotation handle that lets you rotate the box.
 
 ![rotate clipping Box](CFDModelPostProcessing_9.png)
-
+s
 Position the box to the desired clip. Once you are ready to clip, press Apply. The opened surface model will be stored in the model node 'open_model'.
 
 You can continue clipping the model until the flow extensions have been removed and/or you have obtained your ROI. You can reset the clipping by pressing the button 'Reset Clip'. This will reset all the clips and reset the model to the original. You may save the clipped model by pressing the 'Save model' button. This will save the model under its original name with *_ROI appended in vtp format to the same folder from which the input model was loaded.
@@ -74,16 +74,22 @@ You can continue clipping the model until the flow extensions have been removed 
 The final step in the postprocessing workflow allows to compute 2D maps of variables of interest (e.g. wall-shear-stress) from the 3D simulation results. 
 
 First step is to recompute the centerline for the clipped geometry from step 2. To detect endpoints for the centerline, press 'Auto-detect' and prepare the endpoints for centerline computation as described under Step 2. Make sure to Select the correct id corresponding to the inlet.
+
 ![Compute 2D maps settings](CFDModelPostProcessing_11.png)
-For the 2D maps, decide on the longitudinal bin length (in mm) and the number of circumferential bins. This will determine the size of the patches for the 2D maps.
+
+After computation of the centerline, the centerline is split into branches. The branch IDs are displayed in the 3D view as well as in the module GUI. Indicate which branches you want to use in the 2D map under 'Select GroupIds to keep':
+
+![Select GroupIds to keep for 2D map](CFDModelPostProcessing_14.png)
+
+Next, decide on the longitudinal bin length (in mm) and the number of circumferential bins. This will determine the size of the patches for the 2D maps.
 
 Once ready, press 'Compute'. The computation may take a while. After computation is finished, results will be displayed in several windows. To select the variable which you want to display, use the 'Scalar for display' dropdown button. Here you can select the original scalars from the CFD simulation file (these will not be displayed in the 2D maps where their patched counterparts are shown, but will be visible in the 3D geometry), or the patched scalars, i.e. the scalars that have been grouped and averaged into lower resolution patches. The patched scalars are indicated by the suffix (patched) in the dropdown list. 
 
-![Results of 2D map computation](CFDModelPostProcessing_13.png)]
+![Selection of scalar to display](CFDModelPostProcessing_13.png)
 
 After selecting the variable of interest, results are shown in the views. The most left view (view 1) shows the variable on the 3D geometry. The top middle view, view 2, displays the AngularMetric, i.e. the angle w.r.t. the centerline. Where the AngularMetric flips from negative to positive is the cutting line for the 2D maps. The bottom middle view, view 3, displays the group ids of the different branches, which shows which branch is which in the 2D map view on the right. The branches are numbered from low to high in the direction of the centerline.
 
-![Results of 2D map computation](CFDModelPostProcessing_12.png)]
+![Results of 2D map computation](CFDModelPostProcessing_12.png)
 
 The most right view is a tabbed view showing, for each branch of the vessel, the 2D mapped and patched variable of interest. 
 
