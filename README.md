@@ -17,3 +17,5 @@ LabUtils extension provides the following modules:
 - CFD post-processing
     - [ClipBranches](Docs/ClipBranches.md): divide a surface and clip branches in relation to its split and grouped centerlines. Convenience module based on vmtkbranchclipper
     - [CFDModelPostProcessing](Docs/CFDModelPostProcessing.md): module containing the workflow to postprocess files containing CFD results (e.g. *.tec, *_tec.dat, *.vtp format): display results, remove flow extensions, clip surface to ROI, compute 2D maps and save results to file
+- Analysis:
+	- [InspectVolumeWithModel](Docs/InspectVolumeWithModel): module to probe a volume with a model surface. Intensity values of the volume are computed at the surface vertices by taking the mean or average of pixels in the volume that are crossed by line profiles normal to the model surface. 
