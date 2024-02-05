@@ -25,6 +25,7 @@ add_subdirectory(AddFlowExtension)
 add_subdirectory(PrepareModelForCFD)
 add_subdirectory(CFDModelPostprocessing)
 add_subdirectory(InspectVolumeWithModel)
+add_subdirectory(LoadContourFile)
 ## NEXT_MODULE
 
 #-----------------------------------------------------------------------------
